@@ -71,3 +71,14 @@ fun fmt(v: Double): String {
     while (x >= 1000 && i < s.lastIndex) { x /= 1000; i++ }
     return if (i == 0) x.toLong().toString() else String.format(Locale.US, "%.1f%s", x, s[i])
 }
+
+/** Цена за q штук подряд: сумма геометрической прогрессии base*1.15^(n..n+q-1) */
+fun bulkPrice(u: Upgrade, n: Int, q: Int) = u.base * 1.15.pow(n) * (1.15.pow(q) - 1) / 0.15
+
+/** Сколько штук можно купить на имеющиеся кредиты (для кнопки MAX) */
+fun affordable(u: Upgrade, n: Int, credits: Double): Int {
+    if (u.single()) return if (n == 0 && credits >= price(u, 0)) 1 else 0
+    var q = 0
+    while (q < 10_000 && bulkPrice(u, n, q + 1) <= credits) q++
+    return q
+}

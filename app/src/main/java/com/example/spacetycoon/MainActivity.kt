@@ -105,6 +105,7 @@ fun App(vm: GameViewModel) {
     var banner by remember { mutableStateOf<String?>(null) }
     val ach = achCount(s)
     LaunchedEffect(Unit) { delay(1500); ready = true }
+    LaunchedEffect(Unit) { vm.events.collect { banner = it; delay(2500); banner = null } }
     LaunchedEffect(ach) {
         if (ready && ach > seen) { banner = "Достижение получено! +1% к доходу"; delay(2500); banner = null }
         seen = ach
@@ -188,14 +189,19 @@ fun PlanetView(vm: GameViewModel, s: GameState, modifier: Modifier = Modifier.si
         Canvas(Modifier.fillMaxSize()) {
             val c = center; val r = size.width * 0.35f * pulse.value
             drawCircle(Brush.radialGradient(listOf(colors[1].copy(alpha = 0.55f), Color.Transparent), c, r * 1.6f), r * 1.6f, c) // свечение
+            val ringTL = Offset(c.x - r * 1.35f, c.y - r * 0.35f); val ringSz = Size(r * 2.7f, r * 0.7f)
+            val sa = Math.toRadians(spin.toDouble()).toFloat()
+            rotate(-20f, c) {   // задняя половина кольца и челнок за планетой
+                drawArc(Color.White.copy(alpha = 0.25f), 180f, 180f, false, ringTL, ringSz, style = Stroke(3.dp.toPx()))
+                if (sin(sa) < 0) drawCircle(Gold.copy(alpha = 0.6f), 4.dp.toPx(), Offset(c.x + cos(sa) * r * 1.35f, c.y + sin(sa) * r * 0.35f))
+            }
             drawCircle(Brush.radialGradient(listOf(colors[0], colors[1], colors[2]), Offset(c.x - r * 0.3f, c.y - r * 0.3f), r * 1.5f), r, c)
             // Кратеры
             listOf(Triple(-0.35f, -0.1f, 0.2f), Triple(0.25f, 0.3f, 0.15f), Triple(0.3f, -0.4f, 0.1f), Triple(-0.1f, 0.5f, 0.12f))
                 .forEach { (dx, dy, k) -> drawCircle(colors[2].copy(alpha = 0.35f), r * k, Offset(c.x + dx * r, c.y + dy * r)) }
-            rotate(-20f, c) {
-                drawOval(Color.White.copy(alpha = 0.35f), Offset(c.x - r * 1.35f, c.y - r * 0.35f), Size(r * 2.7f, r * 0.7f), style = Stroke(3.dp.toPx()))
-                val a = Math.toRadians(spin.toDouble()).toFloat()
-                drawCircle(Gold, 5.dp.toPx(), Offset(c.x + cos(a) * r * 1.35f, c.y + sin(a) * r * 0.35f)) // челнок на орбите
+            rotate(-20f, c) {   // передняя половина кольца и челнок перед планетой
+                drawArc(Color.White.copy(alpha = 0.55f), 0f, 180f, false, ringTL, ringSz, style = Stroke(3.5f.dp.toPx()))
+                if (sin(sa) >= 0) drawCircle(Gold, 5.dp.toPx(), Offset(c.x + cos(sa) * r * 1.35f, c.y + sin(sa) * r * 0.35f))
             }
             fx.forEach { f ->
                 val age = ((now - f.born) / 900f).coerceIn(0f, 1f)
@@ -222,19 +228,21 @@ fun Balance(v: String, size: TextUnit = 42.sp) = Row(verticalAlignment = Alignme
 }
 
 @Composable
-fun Chip(icon: ImageVector, text: String, color: Color) = Box(
-    Modifier.background(color.copy(alpha = 0.15f), RoundedCornerShape(50)).border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(50))
+fun Chip(icon: ImageVector, text: String, color: Color, onClick: (() -> Unit)? = null) = Box(
+    Modifier.clip(RoundedCornerShape(50)).then(if (onClick != null) Modifier.clickable { onClick() } else Modifier).background(color.copy(alpha = 0.15f), RoundedCornerShape(50)).border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(50))
         .padding(horizontal = 12.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             Icon(icon, null, tint = color, modifier = Modifier.size(15.dp))
-            Text(text, color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(text, color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
         }
     }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun Hud(vm: GameViewModel, s: GameState) = Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
     Balance(fmt(s.credits))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(6.dp), maxItemsInEachRow = 3) {
+        if (vm.dailyAvailable(s)) Chip(Icons.Filled.CardGiftcard, "Бонус дня", Gold) { vm.claimDaily() }
         Chip(Icons.Filled.Bolt, "+${fmt(vm.passive(s))}/сек", Cyan); Chip(Icons.Filled.TouchApp, "+${fmt(vm.tapPower(s))}", Pink)
         if (s.dust > 0) Chip(Icons.Filled.Star, "${s.dust}", Gold)
         val left = (s.boostUntil - System.currentTimeMillis()) / 1000
@@ -269,6 +277,7 @@ fun PrestigeButton(vm: GameViewModel, s: GameState) {
 fun MainScreen(vm: GameViewModel, s: GameState) = Box(Modifier.fillMaxSize()) {
     MainContent(vm, s)
     MeteorLayer(vm)
+    StormLayer(vm)
 }
 
 /** Золотой метеорит: пролетает раз в 30–90 сек, тап даёт бонус */
@@ -347,14 +356,27 @@ fun MainContent(vm: GameViewModel, s: GameState) {
 
 @Composable
 fun UpgradesScreen(vm: GameViewModel, s: GameState) {
+    var qty by remember { mutableIntStateOf(1) }
     val sections = listOf("ЗА ТАП" to Kind.TAP, "ПАССИВНЫЙ ДОХОД" to Kind.PASSIVE, "МНОЖИТЕЛИ" to Kind.MULT, "УТИЛИТЫ" to Kind.CRIT)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { Balance(fmt(s.credits), 26.sp) }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(1, 5, 10, 25, -1).forEach { v ->
+                    val sel = qty == v
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(if (sel) Cyan else Color(0x22FFFFFF)).clickable { qty = v }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text(if (v < 0) "MAX" else "x$v", color = if (sel) Color.Black else Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
         sections.forEach { (title, kind) ->
             item { Text(title, color = Color(0xAAFFFFFF), fontSize = 12.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 8.dp)) }
             items(UPGRADES.filter { it.kind == kind || (kind == Kind.CRIT && it.kind == Kind.UTIL) }) { u ->
                 val n = s.counts[u.id] ?: 0
-                val p = price(u, n)
+                val q = if (u.single()) 1 else if (qty < 0) maxOf(affordable(u, n, s.credits), 1) else qty
+                val p = bulkPrice(u, n, q)
                 val owned = u.single() && n > 0
                 val accent = if (u.kind == Kind.MULT) Gold else if (u.kind == Kind.TAP) Pink else Cyan
                 val prog by animateFloatAsState((s.credits / p).toFloat().coerceIn(0f, 1f), label = "p")
@@ -375,8 +397,8 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
                     }
                     Button(enabled = !owned && s.credits >= p, shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.Black),
-                        onClick = { vm.buy(u) }) {
-                        Text(if (owned) "" else fmt(p), fontWeight = FontWeight.Bold)
+                        onClick = { vm.buy(u, qty) }) {
+                        Text(if (owned) "Есть" else (if (q > 1) "×$q · " else "") + fmt(p), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -425,4 +447,67 @@ fun SettingsScreen(vm: GameViewModel, s: GameState) {
         title = { Text("Сбросить всё?") }, text = { Text("Прогресс будет удалён безвозвратно.") },
         confirmButton = { TextButton(onClick = { vm.reset(); confirm = false }) { Text("Да", color = Pink) } },
         dismissButton = { TextButton(onClick = { confirm = false }) { Text("Отмена") } })
+}
+
+class Rock(val id: Int, val x: Float, val born: Long)
+
+/** Астероидный шторм: раз в 5 минут предлагает 10 секунд тапать по падающим астероидам */
+@Composable
+fun StormLayer(vm: GameViewModel) {
+    var phase by remember { mutableIntStateOf(0) }   // 0 — ждём, 1 — предложение, 2 — игра
+    val rocks = remember { mutableStateListOf<Rock>() }
+    var now by remember { mutableLongStateOf(0L) }
+    var hits by remember { mutableIntStateOf(0) }
+    var left by remember { mutableIntStateOf(10) }
+    var msg by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        delay(60_000)
+        while (true) {
+            phase = 1; delay(15_000)
+            if (phase == 1) phase = 0
+            delay(300_000)
+        }
+    }
+    LaunchedEffect(phase) {
+        if (phase == 2) {
+            hits = 0; rocks.clear()
+            for (i in 0 until 28) {
+                rocks.add(Rock(i, Random.nextFloat(), System.currentTimeMillis()))
+                left = 10 - i * 350 / 1000
+                delay(350)
+            }
+            delay(2000)
+            msg = "Шторм окончен! Уничтожено: $hits · " + vm.stormReward(hits)
+            rocks.clear(); phase = 0
+        }
+    }
+    LaunchedEffect(phase) { while (phase == 2) withFrameNanos { now = System.currentTimeMillis() } }
+    LaunchedEffect(msg) { if (msg != null) { delay(3000); msg = null } }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val w = constraints.maxWidth.toFloat(); val h = constraints.maxHeight.toFloat()
+        if (phase == 1) Button(onClick = { phase = 2 }, Modifier.align(Alignment.TopCenter).padding(top = 150.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Pink)) { Text("Астероидный шторм! Нажми", fontWeight = FontWeight.Bold) }
+        if (phase == 2) {
+            Text("Шторм: ${left}с · уничтожено $hits", Modifier.align(Alignment.TopCenter).padding(top = 150.dp),
+                color = Pink, style = Title.copy(fontSize = 18.sp, shadow = Shadow(Pink, blurRadius = 20f)))
+            rocks.forEach { r ->
+                key(r.id) {
+                    val p = (now - r.born) / 2200f
+                    if (p in 0f..1f) Box(Modifier.offset { IntOffset((r.x * (w - 160f)).roundToInt(), (p * (h - 100f)).roundToInt()) }
+                        .size(56.dp).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { rocks.remove(r); hits++ }) {
+                        Canvas(Modifier.fillMaxSize()) {
+                            val rad = size.minDimension / 2.2f
+                            drawCircle(Brush.radialGradient(listOf(Color(0xFFBCAAA4), Color(0xFF4E342E)), center, rad), rad, center)
+                            drawCircle(Color(0x55000000), rad * 0.25f, Offset(center.x - rad * 0.3f, center.y - rad * 0.2f))
+                            drawCircle(Color(0x55000000), rad * 0.18f, Offset(center.x + rad * 0.35f, center.y + rad * 0.3f))
+                        }
+                    }
+                }
+            }
+        }
+        msg?.let {
+            Text(it, Modifier.align(Alignment.TopCenter).padding(top = 150.dp), color = Pink, textAlign = TextAlign.Center,
+                style = Title.copy(fontSize = 16.sp, shadow = Shadow(Pink, blurRadius = 20f)))
+        }
+    }
 }

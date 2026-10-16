@@ -32,12 +32,17 @@ data class GameState(
     val lastGain: Double = 0.0,   // последний доход с тапа (для всплывающих цифр)
     val meteors: Long = 0,        // поймано метеоритов
     val boostUntil: Long = 0,     // до какого времени действует x10 от метеорита
+    val dailyDay: Long = 0,       // день, когда забрали ежедневный бонус
+    val streak: Int = 0,          // серия дней подряд
+    val loaded: Boolean = false,  // сохранение уже загружено
 )
 
 class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val ds = app.dataStore
     private val _s = MutableStateFlow(GameState())
     val state: StateFlow<GameState> = _s.asStateFlow()
+    private val _events = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val events = _events.asSharedFlow()   // сообщения для баннера сверху
     private var lastTap = 0L
 
     companion object {
@@ -46,8 +51,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val TAPS = longPreferencesKey("taps"); val CRITS = longPreferencesKey("crits")
         val BEST = intPreferencesKey("best"); val DUST = intPreferencesKey("dust")
         val PRES = intPreferencesKey("pres"); val PLAY = longPreferencesKey("play")
-        val MET = longPreferencesKey("met"); val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last")
-        const val MAX_OFFLINE_SEC = 8 * 3600L
+        val MET = longPreferencesKey("met"); val DAILY = longPreferencesKey("daily"); val STREAK = intPreferencesKey("streak"); val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last")
+        const val MAX_OFFLINE_SEC = 30L   // оффлайн-доход не больше, чем за 30 секунд
     }
 
     // ---------- Формулы ----------
@@ -80,13 +85,39 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun buy(u: Upgrade): Boolean {
+    /** Покупка qty штук (qty < 0 — максимум на все кредиты) */
+    fun buy(u: Upgrade, qty: Int): Boolean {
         val s = _s.value
         val n = s.counts[u.id] ?: 0
-        val p = price(u, n)
+        val q = if (u.single()) 1 else if (qty < 0) affordable(u, n, s.credits) else qty
+        if (q < 1) return false
+        val p = bulkPrice(u, n, q)
         if (s.credits < p || (u.single() && n > 0)) return false
-        _s.update { it.copy(credits = it.credits - p, counts = it.counts + (u.id to n + 1)) }
+        _s.update { it.copy(credits = it.credits - p, counts = it.counts + (u.id to n + q)) }
         return true
+    }
+
+    fun dailyAvailable(s: GameState) = s.loaded && s.dailyDay != System.currentTimeMillis() / 86_400_000L
+
+    /** Ежедневный бонус: чем длиннее серия, тем больше награда; каждый 7-й день — звёздная пыль */
+    fun claimDaily() {
+        val s = _s.value
+        val today = System.currentTimeMillis() / 86_400_000L
+        if (s.dailyDay == today) return
+        val streak = if (s.dailyDay == today - 1) s.streak + 1 else 1
+        val g = max(passive(s) * 600, 500.0) * (1 + 0.25 * minOf(streak - 1, 10))
+        val dust = if (streak % 7 == 0) 1 else 0
+        _s.update { it.copy(credits = it.credits + g, total = it.total + g, run = it.run + g, dust = it.dust + dust, dailyDay = today, streak = streak) }
+        _events.tryEmit("Бонус дня: +${fmt(g)}" + (if (dust > 0) " и звёздная пыль" else "") + " · серия $streak")
+        save()
+    }
+
+    /** Награда за уничтоженные астероиды шторма */
+    fun stormReward(hits: Int): String {
+        val s = _s.value
+        val g = hits * max(max(tapPower(s) * 30, passive(s) * 20), 10.0)
+        _s.update { it.copy(credits = it.credits + g, total = it.total + g, run = it.run + g) }
+        return "+${fmt(g)}"
     }
 
     fun prestige() {
@@ -117,7 +148,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setVibrate(v: Boolean) = _s.update { it.copy(vibrate = v) }
     fun dismissOffline() = _s.update { it.copy(offlineGain = 0.0) }
-    fun reset() { _s.value = GameState(); save() }
+    fun reset() { _s.value = GameState(loaded = true); save() }
 
     // ---------- Сохранение / загрузка ----------
     fun save() {
@@ -128,7 +159,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 it[COUNTS] = s.counts.entries.joinToString(",") { e -> "${e.key}=${e.value}" }
                 it[TAPS] = s.taps; it[CRITS] = s.crits; it[BEST] = s.bestCombo
                 it[DUST] = s.dust; it[PRES] = s.prestiges; it[PLAY] = s.playSeconds
-                it[MET] = s.meteors; it[VIB] = s.vibrate; it[LAST] = System.currentTimeMillis()
+                it[MET] = s.meteors; it[DAILY] = s.dailyDay; it[STREAK] = s.streak; it[VIB] = s.vibrate; it[LAST] = System.currentTimeMillis()
             }
         }
     }
@@ -141,7 +172,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             var s = GameState(p[CREDITS] ?: 0.0, p[TOTAL] ?: 0.0, p[RUN] ?: 0.0, counts,
                 p[TAPS] ?: 0, p[CRITS] ?: 0, p[BEST] ?: 0, p[DUST] ?: 0, p[PRES] ?: 0,
                 p[PLAY] ?: 0, 0, p[VIB] ?: true)
-            s = s.copy(meteors = p[MET] ?: 0L)
+            s = s.copy(meteors = p[MET] ?: 0L, dailyDay = p[DAILY] ?: 0L, streak = p[STREAK] ?: 0)
             // Оффлайн-доход (макс. 8 часов)
             val last = p[LAST] ?: 0L
             if (last > 0) {
@@ -149,7 +180,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 val gain = passive(s) * sec
                 if (gain > 0) s = s.copy(credits = s.credits + gain, total = s.total + gain, run = s.run + gain, offlineGain = gain)
             }
-            _s.value = s
+            _s.value = s.copy(loaded = true)
             // Игровой цикл: 10 тиков в секунду, автосохранение раз в 10 секунд
             var ticks = 0
             while (true) {
