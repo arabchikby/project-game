@@ -2,6 +2,11 @@ package com.example.spacetycoon
 
 import android.app.Application
 import android.content.Context
+import android.content.ContentValues
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.AndroidViewModel
@@ -16,6 +21,7 @@ import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.random.Random
+import org.json.JSONObject
 
 val Context.dataStore by preferencesDataStore(name = "save")
 
@@ -153,6 +159,120 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun dismissOffline() = _s.update { it.copy(offlineGain = 0.0) }
     fun reset() { _s.value = GameState(loaded = true); save() }
 
+    // ---------- Переносимое сохранение (переживает удаление приложения) ----------
+    fun exportSave(): String {
+        val s = _s.value
+        val json = JSONObject()
+        json.put("format", "SpaceTycoonSave")
+        json.put("version", 1)
+        json.put("credits", s.credits); json.put("total", s.total); json.put("run", s.run)
+        json.put("counts", JSONObject().apply { s.counts.forEach { (k, v) -> put(k.toString(), v) } })
+        json.put("taps", s.taps); json.put("crits", s.crits); json.put("bestCombo", s.bestCombo)
+        json.put("dust", s.dust); json.put("prestiges", s.prestiges); json.put("playSeconds", s.playSeconds)
+        json.put("vibrate", s.vibrate); json.put("meteors", s.meteors); json.put("boostUntil", s.boostUntil)
+        json.put("dailyDay", s.dailyDay); json.put("streak", s.streak)
+        json.put("savedAt", System.currentTimeMillis())
+        return json.toString(2)
+    }
+
+    suspend fun importSave(jsonText: String): Boolean {
+        return try {
+            val j = JSONObject(jsonText)
+            if (j.optString("format") != "SpaceTycoonSave") return false
+            val c = j.optJSONObject("counts") ?: JSONObject()
+            val counts = mutableMapOf<Int, Int>()
+            val keys = c.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val id = key.toIntOrNull() ?: continue
+                val count = c.optInt(key, 0)
+                if (id > 0 && count >= 0) counts[id] = count
+            }
+            val old = _s.value
+            val restored = old.copy(
+                credits = j.optDouble("credits", 0.0).coerceAtLeast(0.0),
+                total = j.optDouble("total", 0.0).coerceAtLeast(0.0),
+                run = j.optDouble("run", 0.0).coerceAtLeast(0.0),
+                counts = counts,
+                taps = j.optLong("taps", 0).coerceAtLeast(0),
+                crits = j.optLong("crits", 0).coerceAtLeast(0),
+                bestCombo = j.optInt("bestCombo", 0).coerceAtLeast(0),
+                dust = j.optInt("dust", 0).coerceAtLeast(0),
+                prestiges = j.optInt("prestiges", 0).coerceAtLeast(0),
+                playSeconds = j.optLong("playSeconds", 0).coerceAtLeast(0),
+                vibrate = j.optBoolean("vibrate", true),
+                meteors = j.optLong("meteors", 0).coerceAtLeast(0),
+                boostUntil = j.optLong("boostUntil", 0).coerceAtLeast(0),
+                dailyDay = j.optLong("dailyDay", 0).coerceAtLeast(0),
+                streak = j.optInt("streak", 0).coerceAtLeast(0),
+                offlineGain = 0.0, loaded = true
+            )
+            _s.value = restored
+            saveMutex.withLock {
+                ds.edit {
+                    it[CREDITS] = restored.credits; it[TOTAL] = restored.total; it[RUN] = restored.run
+                    it[COUNTS] = restored.counts.entries.joinToString(",") { e -> "${e.key}=${e.value}" }
+                    it[TAPS] = restored.taps; it[CRITS] = restored.crits; it[BEST] = restored.bestCombo
+                    it[DUST] = restored.dust; it[PRES] = restored.prestiges; it[PLAY] = restored.playSeconds
+                    it[MET] = restored.meteors; it[DAILY] = restored.dailyDay; it[STREAK] = restored.streak
+                    it[VIB] = restored.vibrate; it[BOOST] = restored.boostUntil
+                    it[LAST] = System.currentTimeMillis()
+                }
+            }
+            true
+        } catch (_: Exception) { false }
+    }
+
+    // ---------- Резервная копия вне данных приложения ----------
+    // На Android 10+ файл лежит в общей папке Downloads и переживает удаление приложения.
+    private fun readExternalBackup(): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        val resolver = getApplication<Application>().contentResolver
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.MediaColumns._ID)
+        resolver.query(
+            collection, projection,
+            "${MediaStore.MediaColumns.DISPLAY_NAME}=?",
+            arrayOf("SpaceTycoon_save.json"),
+            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val uri = Uri.withAppendedPath(collection, cursor.getLong(0).toString())
+                return resolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            }
+        }
+        return null
+    }
+
+    private fun writeExternalBackup(json: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val resolver = getApplication<Application>().contentResolver
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.MediaColumns._ID)
+        var uri: Uri? = null
+        resolver.query(
+            collection, projection,
+            "${MediaStore.MediaColumns.DISPLAY_NAME}=?",
+            arrayOf("SpaceTycoon_save.json"),
+            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                uri = Uri.withAppendedPath(collection, cursor.getLong(0).toString())
+            }
+        }
+        if (uri == null) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "SpaceTycoon_save.json")
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            uri = resolver.insert(collection, values)
+        }
+        uri?.let { target ->
+            resolver.openOutputStream(target, "wt")?.bufferedWriter()?.use { it.write(json) }
+        }
+    }
+
     // ---------- Сохранение / загрузка ----------
     fun save() {
         viewModelScope.launch {
@@ -169,6 +289,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     it[VIB] = s.vibrate; it[BOOST] = s.boostUntil
                     it[LAST] = System.currentTimeMillis()
                 }
+                // Копия в Downloads не удаляется вместе с приложением.
+                runCatching { writeExternalBackup(exportSave()) }
             }
         }
     }
@@ -190,6 +312,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 if (gain > 0) s = s.copy(credits = s.credits + gain, total = s.total + gain, run = s.run + gain, offlineGain = gain)
             }
             _s.value = s.copy(loaded = true)
+            // После переустановки внутреннее хранилище пустое: поднимаем копию из Downloads.
+            if (p[CREDITS] == null && p[TOTAL] == null && p[COUNTS] == null) {
+                val backup = runCatching { readExternalBackup() }.getOrNull()
+                if (!backup.isNullOrBlank()) importSave(backup)
+            }
             // Игровой цикл: 10 тиков в секунду, автосохранение раз в 10 секунд
             var ticks = 0
             while (true) {
