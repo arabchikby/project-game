@@ -346,7 +346,6 @@ fun AchievementsScreen(s: GameState) {
 }
 
 @Composable
-@Composable
 fun GameHeader(compact: Boolean = false) {
     Row(
         Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
