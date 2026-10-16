@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -355,7 +356,7 @@ fun GameHeader(compact: Boolean = false) {
             Box(Modifier.size(if (compact) 36.dp else 42.dp).clip(RoundedCornerShape(13.dp))
                 .background(Brush.linearGradient(listOf(Cyan.copy(alpha = 0.28f), Color(0xFF3541A5).copy(alpha = 0.25f)))),
                 contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.RocketLaunch, null, tint = Cyan, modifier = Modifier.size(if (compact) 21.dp else 25.dp))
+                Icon(painterResource(R.drawable.ic_game_rocket), null, tint = Cyan, modifier = Modifier.size(if (compact) 25.dp else 29.dp))
             }
             Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text("SPACE TYCOON", style = Title.copy(fontSize = if (compact) 15.sp else 18.sp, color = Color.White, letterSpacing = 2.sp))
@@ -503,7 +504,7 @@ fun SettingsScreen(vm: GameViewModel, s: GameState) {
                 Text("SPACE TYCOON", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Text("Версия alpha 3.0 · тестовая сборка", color = Muted, fontSize = 12.sp)
             }
-            Icon(Icons.Filled.RocketLaunch, null, tint = Cyan, modifier = Modifier.size(24.dp))
+            Icon(painterResource(R.drawable.ic_game_rocket), null, tint = Cyan, modifier = Modifier.size(28.dp))
         }
         Button(onClick = { confirm = true }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C))) { Text("Сбросить прогресс") }
