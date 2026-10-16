@@ -10,6 +10,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.random.Random
 
@@ -28,6 +30,8 @@ data class GameState(
     val lastCrit: Int = 0,        // множитель последнего крита (0 — нет)
     val offlineGain: Double = 0.0,
     val lastGain: Double = 0.0,   // последний доход с тапа (для всплывающих цифр)
+    val meteors: Long = 0,        // поймано метеоритов
+    val boostUntil: Long = 0,     // до какого времени действует x10 от метеорита
 )
 
 class GameViewModel(app: Application) : AndroidViewModel(app) {
@@ -42,14 +46,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val TAPS = longPreferencesKey("taps"); val CRITS = longPreferencesKey("crits")
         val BEST = intPreferencesKey("best"); val DUST = intPreferencesKey("dust")
         val PRES = intPreferencesKey("pres"); val PLAY = longPreferencesKey("play")
-        val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last")
+        val MET = longPreferencesKey("met"); val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last")
         const val MAX_OFFLINE_SEC = 8 * 3600L
     }
 
     // ---------- Формулы ----------
     fun mult(s: GameState): Double {
-        var m = 1.0 + 0.05 * s.dust                      // +5% за каждую звёздную пыль
+        var m = (1.0 + 0.05 * s.dust) * (1.0 + 0.01 * achCount(s))   // пыль +5%, достижения +1%
         UPGRADES.filter { it.kind == Kind.MULT && (s.counts[it.id] ?: 0) > 0 }.forEach { m *= it.value }
+        if (System.currentTimeMillis() < s.boostUntil) m *= 10
         return m
     }
     fun tapPower(s: GameState) =
@@ -79,7 +84,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val s = _s.value
         val n = s.counts[u.id] ?: 0
         val p = price(u, n)
-        if (s.credits < p || (u.kind == Kind.MULT && n > 0)) return false
+        if (s.credits < p || (u.single() && n > 0)) return false
         _s.update { it.copy(credits = it.credits - p, counts = it.counts + (u.id to n + 1)) }
         return true
     }
@@ -89,6 +94,25 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (g < 1) return
         _s.update { it.copy(credits = 0.0, run = 0.0, counts = emptyMap(), dust = it.dust + g, prestiges = it.prestiges + 1) }
         save()
+    }
+
+    /** Пауза до следующего золотого метеорита: 30–90 сек, гипер-ускоритель сокращает до 70% */
+    fun meteorDelayMs(): Long =
+        (Random.nextLong(30_000, 90_001) * 0.9.pow(_s.value.counts[19] ?: 0).coerceAtLeast(0.3)).toLong()
+
+    /** Поймали метеорит: мгновенные кредиты или x10 на 15 сек (магнит удваивает награду) */
+    fun catchMeteor(): String {
+        val s = _s.value
+        val k = if ((s.counts[20] ?: 0) > 0) 2.0 else 1.0
+        return if (Random.nextBoolean()) {
+            val g = max(passive(s) * 120, tapPower(s) * 100) * k
+            _s.update { it.copy(credits = it.credits + g, total = it.total + g, run = it.run + g, meteors = it.meteors + 1) }
+            "+${fmt(g)}"
+        } else {
+            val sec = (15 * k).toInt()
+            _s.update { it.copy(meteors = it.meteors + 1, boostUntil = System.currentTimeMillis() + sec * 1000L) }
+            "x10 на $sec сек!"
+        }
     }
 
     fun setVibrate(v: Boolean) = _s.update { it.copy(vibrate = v) }
@@ -104,7 +128,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 it[COUNTS] = s.counts.entries.joinToString(",") { e -> "${e.key}=${e.value}" }
                 it[TAPS] = s.taps; it[CRITS] = s.crits; it[BEST] = s.bestCombo
                 it[DUST] = s.dust; it[PRES] = s.prestiges; it[PLAY] = s.playSeconds
-                it[VIB] = s.vibrate; it[LAST] = System.currentTimeMillis()
+                it[MET] = s.meteors; it[VIB] = s.vibrate; it[LAST] = System.currentTimeMillis()
             }
         }
     }
@@ -117,6 +141,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             var s = GameState(p[CREDITS] ?: 0.0, p[TOTAL] ?: 0.0, p[RUN] ?: 0.0, counts,
                 p[TAPS] ?: 0, p[CRITS] ?: 0, p[BEST] ?: 0, p[DUST] ?: 0, p[PRES] ?: 0,
                 p[PLAY] ?: 0, 0, p[VIB] ?: true)
+            s = s.copy(meteors = p[MET] ?: 0L)
             // Оффлайн-доход (макс. 8 часов)
             val last = p[LAST] ?: 0L
             if (last > 0) {

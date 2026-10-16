@@ -3,11 +3,19 @@ package com.example.spacetycoon
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import kotlinx.coroutines.delay
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -59,6 +67,22 @@ private val Card12 = RoundedCornerShape(16.dp)
 fun Modifier.glass(border: Color = Color(0x33FFFFFF)) =
     this.clip(Card12).background(Color(0x22FFFFFF)).border(1.dp, border, Card12)
 
+/** Иконка для каждого улучшения (единый стиль вместо эмодзи) */
+fun iconFor(id: Int): ImageVector = when (id) {
+    1 -> Icons.Filled.Construction; 2 -> Icons.Filled.Hardware; 3 -> Icons.Filled.FlashOn
+    4 -> Icons.Filled.ContentCut; 5 -> Icons.Filled.AutoAwesome; 6 -> Icons.Filled.RocketLaunch
+    7 -> Icons.Filled.Memory; 8 -> Icons.Filled.SatelliteAlt; 9 -> Icons.Filled.Factory
+    10 -> Icons.Filled.Public; 11 -> Icons.Filled.Language; 12 -> Icons.Filled.TrackChanges
+    13 -> Icons.Filled.WbSunny; 14 -> Icons.Filled.Share; 15 -> Icons.Filled.Diamond
+    16 -> Icons.Filled.WorkspacePremium; 17 -> Icons.Filled.EmojiEvents; 18 -> Icons.Filled.Casino
+    19 -> Icons.Filled.Speed; 20 -> Icons.Filled.GpsFixed; else -> Icons.Filled.Visibility
+}
+/** Иконки достижений в порядке списка ACHS */
+val ACH_ICONS = listOf(Icons.Filled.TouchApp, Icons.Filled.PanTool, Icons.Filled.Bolt, Icons.Filled.Whatshot,
+    Icons.Filled.Stars, Icons.Filled.ShoppingCart, Icons.Filled.Inventory2, Icons.Filled.FlashOn, Icons.Filled.GpsFixed,
+    Icons.Filled.Cached, Icons.Filled.Speed, Icons.Filled.TrackChanges, Icons.Filled.AutoAwesome, Icons.Filled.Savings,
+    Icons.Filled.AccountBalance, Icons.Filled.Diamond, Icons.Filled.Star, Icons.Filled.EmojiEvents)
+
 /** Скин планеты зависит от всего заработанного */
 fun skin(total: Double) = when {
     total < 1e4 -> listOf(Color(0xFFFFB74D), Color(0xFFD84315), Color(0xFF3E1A0A))
@@ -75,13 +99,22 @@ fun skinName(total: Double) = when {
 fun App(vm: GameViewModel) {
     val s by vm.state.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("🪐" to "Игра", "🛒" to "Апгрейды", "📊" to "Статистика", "⚙️" to "Настройки")
+    var seen by remember { mutableIntStateOf(0) }
+    var ready by remember { mutableStateOf(false) }
+    var banner by remember { mutableStateOf<String?>(null) }
+    val ach = achCount(s)
+    LaunchedEffect(Unit) { delay(1500); ready = true }
+    LaunchedEffect(ach) {
+        if (ready && ach > seen) { banner = "Достижение получено! +1% к доходу"; delay(2500); banner = null }
+        seen = ach
+    }
+    val tabs = listOf(Icons.Filled.Public to "Игра", Icons.Filled.ShoppingCart to "Апгрейды", Icons.Filled.EmojiEvents to "Награды", Icons.Filled.BarChart to "Статистика", Icons.Filled.Settings to "Настройки")
 
     if (s.offlineGain > 0) AlertDialog(
         onDismissRequest = vm::dismissOffline, containerColor = Color(0xFF14103A),
         confirmButton = { TextButton(onClick = vm::dismissOffline) { Text("Забрать", color = Cyan) } },
         title = { Text("Пока вас не было...") },
-        text = { Text("Заработано: 💎 ${fmt(s.offlineGain)}", color = Gold, fontSize = 20.sp) })
+        text = { Text("Заработано: ${fmt(s.offlineGain)}", color = Gold, fontSize = 20.sp) })
 
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF2A0A5E), Color(0xFF0D1B4D), Color(0xFF020208))))) {
         Starfield()
@@ -89,14 +122,19 @@ fun App(vm: GameViewModel) {
             NavigationBar(containerColor = Color(0xAA050212)) {
                 tabs.forEachIndexed { i, (e, n) ->
                     NavigationBarItem(selected = tab == i, onClick = { tab = i },
-                        icon = { Text(e, fontSize = 20.sp) }, label = { Text(n, fontSize = 10.sp) },
+                        icon = { Icon(e, null) }, label = { Text(n, fontSize = 10.sp) },
                         colors = NavigationBarItemDefaults.colors(indicatorColor = Cyan.copy(alpha = 0.25f), selectedTextColor = Cyan))
                 }
             }
         }) { pad ->
             Crossfade(tab, Modifier.padding(pad).fillMaxSize(), label = "tab") {
-                when (it) { 0 -> MainScreen(vm, s); 1 -> UpgradesScreen(vm, s); 2 -> StatsScreen(s); else -> SettingsScreen(vm, s) }
+                when (it) { 0 -> MainScreen(vm, s); 1 -> UpgradesScreen(vm, s); 2 -> AchievementsScreen(s); 3 -> StatsScreen(s); else -> SettingsScreen(vm, s) }
             }
+        }
+        AnimatedVisibility(banner != null, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp),
+            enter = fadeIn() + slideInVertically { -it }, exit = fadeOut()) {
+            Text(banner ?: "", Modifier.glass(Gold).background(Color(0xCC14103A)).padding(horizontal = 16.dp, vertical = 10.dp),
+                color = Gold, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -150,6 +188,9 @@ fun PlanetView(vm: GameViewModel, s: GameState, modifier: Modifier = Modifier.si
             val c = center; val r = size.width * 0.35f * pulse.value
             drawCircle(Brush.radialGradient(listOf(colors[1].copy(alpha = 0.55f), Color.Transparent), c, r * 1.6f), r * 1.6f, c) // свечение
             drawCircle(Brush.radialGradient(listOf(colors[0], colors[1], colors[2]), Offset(c.x - r * 0.3f, c.y - r * 0.3f), r * 1.5f), r, c)
+            // Кратеры
+            listOf(Triple(-0.35f, -0.1f, 0.2f), Triple(0.25f, 0.3f, 0.15f), Triple(0.3f, -0.4f, 0.1f), Triple(-0.1f, 0.5f, 0.12f))
+                .forEach { (dx, dy, k) -> drawCircle(colors[2].copy(alpha = 0.35f), r * k, Offset(c.x + dx * r, c.y + dy * r)) }
             rotate(-20f, c) {
                 drawOval(Color.White.copy(alpha = 0.35f), Offset(c.x - r * 1.35f, c.y - r * 0.35f), Size(r * 2.7f, r * 0.7f), style = Stroke(3.dp.toPx()))
                 val a = Math.toRadians(spin.toDouble()).toFloat()
@@ -174,16 +215,30 @@ fun PlanetView(vm: GameViewModel, s: GameState, modifier: Modifier = Modifier.si
 }
 
 @Composable
-fun Chip(text: String, color: Color) = Box(
+fun Balance(v: String, size: TextUnit = 42.sp) = Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Icon(Icons.Filled.Diamond, null, tint = Cyan, modifier = Modifier.size((size.value * 0.9f).dp))
+    Text(v, style = Title.copy(fontSize = size, color = Cyan, shadow = Shadow(Cyan, blurRadius = 28f)))
+}
+
+@Composable
+fun Chip(icon: ImageVector, text: String, color: Color) = Box(
     Modifier.background(color.copy(alpha = 0.15f), RoundedCornerShape(50)).border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(50))
-        .padding(horizontal = 12.dp, vertical = 6.dp)) { Text(text, color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+        .padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(15.dp))
+            Text(text, color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+    }
 
 @Composable
 fun Hud(vm: GameViewModel, s: GameState) = Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Text("💎 ${fmt(s.credits)}", style = Title.copy(fontSize = 42.sp, color = Cyan, shadow = Shadow(Cyan, blurRadius = 28f)))
+    Balance(fmt(s.credits))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Chip("⚡ +${fmt(vm.passive(s))}/сек", Cyan); Chip("👆 +${fmt(vm.tapPower(s))}", Pink)
-        if (s.dust > 0) Chip("⭐ ${s.dust}", Gold)
+        Chip(Icons.Filled.Bolt, "+${fmt(vm.passive(s))}/сек", Cyan); Chip(Icons.Filled.TouchApp, "+${fmt(vm.tapPower(s))}", Pink)
+        if (s.dust > 0) Chip(Icons.Filled.Star, "${s.dust}", Gold)
+        val left = (s.boostUntil - System.currentTimeMillis()) / 1000
+        if (left > 0) Chip(Icons.Filled.Whatshot, "x10 · ${left}с", Gold)
+        if ((s.counts[21] ?: 0) > 0) Chip(Icons.Filled.Visibility, "10 мин: +${fmt(vm.passive(s) * 600)}", Pink)
     }
 }
 
@@ -205,12 +260,76 @@ fun PrestigeButton(vm: GameViewModel, s: GameState) {
     Button(onClick = vm::prestige, enabled = gain >= 1, shape = RoundedCornerShape(50),
         colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black,
             disabledContainerColor = Color(0x22FFFFFF), disabledContentColor = Color.Gray)) {
-        Text(if (gain >= 1) "⭐ Престиж: +$gain пыли" else "⭐ Престиж с 1M за забег", fontWeight = FontWeight.Bold)
+        Text(if (gain >= 1) "Престиж: +$gain пыли" else "Престиж с 1M за забег", fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-fun MainScreen(vm: GameViewModel, s: GameState) {
+fun MainScreen(vm: GameViewModel, s: GameState) = Box(Modifier.fillMaxSize()) {
+    MainContent(vm, s)
+    MeteorLayer(vm)
+}
+
+/** Золотой метеорит: пролетает раз в 30–90 сек, тап даёт бонус */
+@Composable
+fun MeteorLayer(vm: GameViewModel) {
+    val prog = remember { Animatable(0f) }
+    var visible by remember { mutableStateOf(false) }
+    var yFrac by remember { mutableFloatStateOf(0.2f) }
+    var msg by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(vm.meteorDelayMs())
+            yFrac = 0.12f + Random.nextFloat() * 0.5f
+            prog.snapTo(0f); visible = true
+            prog.animateTo(1f, tween(5000, easing = LinearEasing))
+            visible = false
+        }
+    }
+    LaunchedEffect(msg) { if (msg != null) { delay(2200); msg = null } }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val w = constraints.maxWidth.toFloat(); val h = constraints.maxHeight.toFloat()
+        if (visible) Box(
+            Modifier.offset { IntOffset((prog.value * (w + 200f) - 100f).roundToInt(), (yFrac * h + sin(prog.value * 9f) * 30f).roundToInt()) }
+                .size(64.dp).background(Brush.radialGradient(listOf(Gold.copy(alpha = 0.7f), Color.Transparent)), CircleShape)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                    msg = "Метеорит! " + vm.catchMeteor(); visible = false
+                }, contentAlignment = Alignment.Center) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        val c = center
+                        drawLine(Brush.horizontalGradient(listOf(Color.Transparent, Gold), 0f, c.x), Offset(0f, c.y), c, strokeWidth = 10.dp.toPx(), cap = StrokeCap.Round)
+                        drawCircle(Brush.radialGradient(listOf(Color.White, Gold), c, 14.dp.toPx()), 12.dp.toPx(), c)
+                    }
+                }
+        msg?.let {
+            Text(it, Modifier.align(Alignment.TopCenter).padding(top = 24.dp), color = Gold,
+                style = Title.copy(fontSize = 18.sp, shadow = Shadow(Gold, blurRadius = 20f)))
+        }
+    }
+}
+
+@Composable
+fun AchievementsScreen(s: GameState) {
+    val done = achCount(s)
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Достижения", style = Title.copy(fontSize = 26.sp))
+        Text("$done / ${ACHS.size} · +$done% к доходу", color = Gold, fontWeight = FontWeight.Bold)
+        LazyVerticalGrid(GridCells.Adaptive(104.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(ACHS) { a ->
+                val ok = a.check(s)
+                Column(Modifier.glass(if (ok) Gold.copy(alpha = 0.8f) else Color(0x22FFFFFF)).padding(10.dp).alpha(if (ok) 1f else 0.4f),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(ACH_ICONS[ACHS.indexOf(a)], null, tint = if (ok) Gold else Color.White, modifier = Modifier.size(32.dp))
+                    Text(a.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Text(a.desc, fontSize = 10.sp, color = Color(0xAAFFFFFF), textAlign = TextAlign.Center)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MainContent(vm: GameViewModel, s: GameState) {
     val land = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     if (land) Row(Modifier.fillMaxSize().padding(16.dp), Arrangement.spacedBy(24.dp), Alignment.CenterVertically) {
         PlanetView(vm, s, Modifier.size(260.dp))
@@ -227,26 +346,26 @@ fun MainScreen(vm: GameViewModel, s: GameState) {
 
 @Composable
 fun UpgradesScreen(vm: GameViewModel, s: GameState) {
-    val ctx = LocalContext.current
-    val sections = listOf("👆 ЗА ТАП" to Kind.TAP, "⚡ ПАССИВНЫЙ ДОХОД" to Kind.PASSIVE, "✨ МНОЖИТЕЛИ" to Kind.MULT, "🎯 УТИЛИТЫ" to Kind.CRIT)
+    val sections = listOf("ЗА ТАП" to Kind.TAP, "ПАССИВНЫЙ ДОХОД" to Kind.PASSIVE, "МНОЖИТЕЛИ" to Kind.MULT, "УТИЛИТЫ" to Kind.CRIT)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { Text("💎 ${fmt(s.credits)}", style = Title.copy(fontSize = 26.sp, color = Cyan, shadow = Shadow(Cyan, blurRadius = 20f))) }
+        item { Balance(fmt(s.credits), 26.sp) }
         sections.forEach { (title, kind) ->
             item { Text(title, color = Color(0xAAFFFFFF), fontSize = 12.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 8.dp)) }
-            items(UPGRADES.filter { it.kind == kind }) { u ->
+            items(UPGRADES.filter { it.kind == kind || (kind == Kind.CRIT && it.kind == Kind.UTIL) }) { u ->
                 val n = s.counts[u.id] ?: 0
                 val p = price(u, n)
-                val owned = u.kind == Kind.MULT && n > 0
+                val owned = u.single() && n > 0
                 val accent = if (u.kind == Kind.MULT) Gold else if (u.kind == Kind.TAP) Pink else Cyan
                 val prog by animateFloatAsState((s.credits / p).toFloat().coerceIn(0f, 1f), label = "p")
                 val desc = when (u.kind) {
                     Kind.TAP -> "+${fmt(u.value)} за тап"; Kind.PASSIVE -> "+${fmt(u.value)}/сек"
                     Kind.MULT -> "×${u.value} ко всему"; Kind.CRIT -> "+5% к шансу крита"
+                    Kind.UTIL -> when (u.id) { 19 -> "метеориты чаще"; 20 -> "награда метеоритов x2"; else -> "прогноз дохода" }
                 }
                 Row(Modifier.fillMaxWidth().glass(if (n > 0) accent.copy(alpha = 0.8f) else Color(0x33FFFFFF)).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(accent.copy(alpha = 0.4f), Color(0x22000000)))),
-                        contentAlignment = Alignment.Center) { Text(u.emoji, fontSize = 28.sp) }
+                        contentAlignment = Alignment.Center) { Icon(iconFor(u.id), null, tint = accent, modifier = Modifier.size(30.dp)) }
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(u.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         Text("$desc · ×$n", fontSize = 12.sp, color = Color(0xAAFFFFFF))
@@ -255,8 +374,8 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
                     }
                     Button(enabled = !owned && s.credits >= p, shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.Black),
-                        onClick = { if (vm.buy(u)) Toast.makeText(ctx, "Куплено: ${u.name}", Toast.LENGTH_SHORT).show() }) {
-                        Text(if (owned) "✔" else fmt(p), fontWeight = FontWeight.Bold)
+                        onClick = { vm.buy(u) }) {
+                        Text(if (owned) "" else fmt(p), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -267,17 +386,20 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
 @Composable
 fun StatsScreen(s: GameState) {
     val rows = listOf(
-        Triple("👆", "Тапов", s.taps.toString()), Triple("💎", "Заработано", fmt(s.total)),
-        Triple("💥", "Критов", s.crits.toString()), Triple("🔥", "Лучшее комбо", s.bestCombo.toString()),
-        Triple("⭐", "Звёздная пыль", s.dust.toString()), Triple("🔄", "Престижей", s.prestiges.toString()),
-        Triple("⏱️", "Время в игре", "${s.playSeconds / 60} мин"))
+        Triple(Icons.Filled.TouchApp, "Тапов", s.taps.toString()), Triple(Icons.Filled.Diamond, "Заработано", fmt(s.total)),
+        Triple(Icons.Filled.FlashOn, "Критов", s.crits.toString()), Triple(Icons.Filled.Whatshot, "Лучшее комбо", s.bestCombo.toString()),
+        Triple(Icons.Filled.Star, "Звёздная пыль", s.dust.toString()), Triple(Icons.Filled.Cached, "Престижей", s.prestiges.toString()),
+        Triple(Icons.Filled.Timer, "Время в игре", "${s.playSeconds / 60} мин"), Triple(Icons.Filled.TrackChanges, "Метеоритов", s.meteors.toString()))
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("📊 Статистика", style = Title.copy(fontSize = 26.sp))
+        Text("Статистика", style = Title.copy(fontSize = 26.sp))
         rows.chunked(2).forEach { pair ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                pair.forEach { (e, k, v) ->
+                pair.forEach { (ic, k, v) ->
                     Column(Modifier.weight(1f).glass(Cyan.copy(alpha = 0.3f)).padding(14.dp)) {
-                        Text("$e $k", fontSize = 12.sp, color = Color(0xAAFFFFFF))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(ic, null, tint = Cyan, modifier = Modifier.size(16.dp))
+                            Text(k, fontSize = 12.sp, color = Color(0xAAFFFFFF))
+                        }
                         Text(v, style = Title.copy(fontSize = 22.sp, color = Cyan))
                     }
                 }
@@ -291,12 +413,12 @@ fun StatsScreen(s: GameState) {
 fun SettingsScreen(vm: GameViewModel, s: GameState) {
     var confirm by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("⚙️ Настройки", style = Title.copy(fontSize = 26.sp))
+        Text("Настройки", style = Title.copy(fontSize = 26.sp))
         Row(Modifier.fillMaxWidth().glass().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text("📳 Вибрация"); Switch(checked = s.vibrate, onCheckedChange = vm::setVibrate)
+            Text("Вибрация"); Switch(checked = s.vibrate, onCheckedChange = vm::setVibrate)
         }
         Button(onClick = { confirm = true }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C))) { Text("🗑️ Сбросить прогресс") }
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C))) { Text("Сбросить прогресс") }
     }
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, containerColor = Color(0xFF14103A),
         title = { Text("Сбросить всё?") }, text = { Text("Прогресс будет удалён безвозвратно.") },
