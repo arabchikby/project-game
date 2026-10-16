@@ -52,7 +52,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Pink, tertiary = Gold)) { App(vm) }
+            MaterialTheme(colorScheme = darkColorScheme(
+                primary = Cyan, secondary = Pink, tertiary = Gold,
+                background = Color(0xFF100820), surface = Color(0xFF19102E),
+                onPrimary = Color.White, onSurface = Color(0xFFF5EDFF)
+            )) { App(vm) }
         }
     }
     override fun onPause() { super.onPause(); vm.save() }
@@ -60,13 +64,13 @@ class MainActivity : ComponentActivity() {
 }
 
 // ---------- Палитра и стили ----------
-val Cyan = Color(0xFF00E5FF); val Pink = Color(0xFFFF4081); val Gold = Color(0xFFFFD700)
+val Cyan = Color(0xFFB56CFF); val Pink = Color(0xFFFF72C6); val Gold = Color(0xFFFFD166)
 private val Title = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
 private val Card12 = RoundedCornerShape(16.dp)
 
 /** «Стеклянная» карточка с неоновой рамкой */
 fun Modifier.glass(border: Color = Color(0x33FFFFFF)) =
-    this.clip(Card12).background(Color(0x22FFFFFF)).border(1.dp, border, Card12)
+    this.clip(Card12).background(Color(0x241F0B3D)).border(1.dp, border, Card12)
 
 /** Иконка для каждого улучшения (единый стиль вместо эмодзи) */
 fun iconFor(id: Int): ImageVector = when (id) {
@@ -113,19 +117,19 @@ fun App(vm: GameViewModel) {
     val tabs = listOf(Icons.Filled.Public to "Игра", Icons.Filled.ShoppingCart to "Апгрейды", Icons.Filled.EmojiEvents to "Награды", Icons.Filled.BarChart to "Статистика", Icons.Filled.Settings to "Настройки")
 
     if (s.offlineGain > 0) AlertDialog(
-        onDismissRequest = vm::dismissOffline, containerColor = Color(0xFF14103A),
+        onDismissRequest = vm::dismissOffline, containerColor = Color(0xFF1A1030),
         confirmButton = { TextButton(onClick = vm::dismissOffline) { Text("Забрать", color = Cyan) } },
         title = { Text("Пока вас не было...") },
         text = { Text("Заработано: ${fmt(s.offlineGain)}", color = Gold, fontSize = 20.sp) })
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF2A0A5E), Color(0xFF0D1B4D), Color(0xFF020208))))) {
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF30105A), Color(0xFF170D35), Color(0xFF070510))))) {
         Starfield()
         Scaffold(containerColor = Color.Transparent, bottomBar = {
-            NavigationBar(containerColor = Color(0xAA050212)) {
+            NavigationBar(containerColor = Color(0xEE100820)) {
                 tabs.forEachIndexed { i, (e, n) ->
                     NavigationBarItem(selected = tab == i, onClick = { tab = i },
                         icon = { Icon(e, null) }, label = { Text(n, fontSize = 10.sp) },
-                        colors = NavigationBarItemDefaults.colors(indicatorColor = Cyan.copy(alpha = 0.25f), selectedTextColor = Cyan))
+                        colors = NavigationBarItemDefaults.colors(indicatorColor = Cyan.copy(alpha = 0.30f), selectedTextColor = Cyan))
                 }
             }
         }) { pad ->
@@ -144,7 +148,7 @@ fun App(vm: GameViewModel) {
 /** Мерцающие звёзды на фоне */
 @Composable
 fun Starfield() {
-    val stars = remember { List(90) { Triple(Random.nextFloat(), Random.nextFloat(), Random.nextFloat()) } }
+    val stars = remember { List(58) { Triple(Random.nextFloat(), Random.nextFloat(), Random.nextFloat()) } }
     val t by rememberInfiniteTransition(label = "stars").animateFloat(0f, 1f, infiniteRepeatable(tween(5000, easing = LinearEasing)), label = "t")
     Canvas(Modifier.fillMaxSize()) {
         stars.forEach { (x, y, p) ->
@@ -163,7 +167,16 @@ fun PlanetView(vm: GameViewModel, s: GameState, modifier: Modifier = Modifier.si
     val scope = rememberCoroutineScope()
     val fx = remember { mutableStateListOf<Fx>() }
     var now by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(Unit) { while (true) { withFrameNanos { now = it / 1_000_000 }; fx.removeAll { f -> now - f.born > 900 } } }
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (fx.isNotEmpty()) {
+                withFrameNanos { now = it / 1_000_000 }
+                fx.removeAll { f -> now - f.born > 900 }
+            } else {
+                delay(120) // Не обновляем состояние каждый кадр, когда эффектов нет.
+            }
+        }
+    }
     val pulse = remember { Animatable(1f) }
     val shake = remember { Animatable(0f) }
     val spin by rememberInfiniteTransition(label = "spin").animateFloat(0f, 360f, infiniteRepeatable(tween(14000, easing = LinearEasing)), label = "a")
@@ -443,7 +456,7 @@ fun SettingsScreen(vm: GameViewModel, s: GameState) {
         Button(onClick = { confirm = true }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C))) { Text("Сбросить прогресс") }
     }
-    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, containerColor = Color(0xFF14103A),
+    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, containerColor = Color(0xFF1A1030),
         title = { Text("Сбросить всё?") }, text = { Text("Прогресс будет удалён безвозвратно.") },
         confirmButton = { TextButton(onClick = { vm.reset(); confirm = false }) { Text("Да", color = Pink) } },
         dismissButton = { TextButton(onClick = { confirm = false }) { Text("Отмена") } })
