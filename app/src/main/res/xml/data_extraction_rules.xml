@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Include the DataStore save file in Android cloud backup. -->
+        <include domain="file" path="datastore/" />
+    </cloud-backup>
+    <device-transfer>
+        <!-- Also transfer the save when migrating to another Android device. -->
+        <include domain="file" path="datastore/" />
+    </device-transfer>
+</data-extraction-rules>

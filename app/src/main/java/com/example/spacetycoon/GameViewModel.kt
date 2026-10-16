@@ -9,6 +9,8 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.pow
@@ -44,6 +46,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val events = _events.asSharedFlow()   // сообщения для баннера сверху
     private var lastTap = 0L
+    private val saveMutex = Mutex()
 
     companion object {
         val CREDITS = doublePreferencesKey("credits"); val TOTAL = doublePreferencesKey("total")
@@ -51,7 +54,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val TAPS = longPreferencesKey("taps"); val CRITS = longPreferencesKey("crits")
         val BEST = intPreferencesKey("best"); val DUST = intPreferencesKey("dust")
         val PRES = intPreferencesKey("pres"); val PLAY = longPreferencesKey("play")
-        val MET = longPreferencesKey("met"); val DAILY = longPreferencesKey("daily"); val STREAK = intPreferencesKey("streak"); val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last")
+        val MET = longPreferencesKey("met"); val DAILY = longPreferencesKey("daily"); val STREAK = intPreferencesKey("streak"); val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last"); val BOOST = longPreferencesKey("boost")
         const val MAX_OFFLINE_SEC = 30L   // оффлайн-доход не больше, чем за 30 секунд
     }
 
@@ -152,14 +155,20 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Сохранение / загрузка ----------
     fun save() {
-        val s = _s.value
         viewModelScope.launch {
-            ds.edit {
-                it[CREDITS] = s.credits; it[TOTAL] = s.total; it[RUN] = s.run
-                it[COUNTS] = s.counts.entries.joinToString(",") { e -> "${e.key}=${e.value}" }
-                it[TAPS] = s.taps; it[CRITS] = s.crits; it[BEST] = s.bestCombo
-                it[DUST] = s.dust; it[PRES] = s.prestiges; it[PLAY] = s.playSeconds
-                it[MET] = s.meteors; it[DAILY] = s.dailyDay; it[STREAK] = s.streak; it[VIB] = s.vibrate; it[LAST] = System.currentTimeMillis()
+            // Serialize saves and read the latest state when the write actually starts.
+            // This prevents a slower, older save from overwriting a newer one.
+            saveMutex.withLock {
+                val s = _s.value
+                ds.edit {
+                    it[CREDITS] = s.credits; it[TOTAL] = s.total; it[RUN] = s.run
+                    it[COUNTS] = s.counts.entries.joinToString(",") { e -> "${e.key}=${e.value}" }
+                    it[TAPS] = s.taps; it[CRITS] = s.crits; it[BEST] = s.bestCombo
+                    it[DUST] = s.dust; it[PRES] = s.prestiges; it[PLAY] = s.playSeconds
+                    it[MET] = s.meteors; it[DAILY] = s.dailyDay; it[STREAK] = s.streak
+                    it[VIB] = s.vibrate; it[BOOST] = s.boostUntil
+                    it[LAST] = System.currentTimeMillis()
+                }
             }
         }
     }
@@ -172,7 +181,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             var s = GameState(p[CREDITS] ?: 0.0, p[TOTAL] ?: 0.0, p[RUN] ?: 0.0, counts,
                 p[TAPS] ?: 0, p[CRITS] ?: 0, p[BEST] ?: 0, p[DUST] ?: 0, p[PRES] ?: 0,
                 p[PLAY] ?: 0, 0, p[VIB] ?: true)
-            s = s.copy(meteors = p[MET] ?: 0L, dailyDay = p[DAILY] ?: 0L, streak = p[STREAK] ?: 0)
+            s = s.copy(meteors = p[MET] ?: 0L, dailyDay = p[DAILY] ?: 0L, streak = p[STREAK] ?: 0, boostUntil = p[BOOST] ?: 0L)
             // Оффлайн-доход (макс. 8 часов)
             val last = p[LAST] ?: 0L
             if (last > 0) {

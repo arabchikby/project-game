@@ -52,7 +52,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Pink, tertiary = Gold)) { App(vm) }
+            MaterialTheme(colorScheme = darkColorScheme(
+                primary = Cyan, secondary = Pink, tertiary = Gold,
+                background = Color(0xFF050914), surface = Color(0xFF0D1728),
+                onBackground = Color(0xFFF2F7FF), onSurface = Color(0xFFF2F7FF)
+            )) { App(vm) }
         }
     }
     override fun onPause() { super.onPause(); vm.save() }
@@ -60,7 +64,10 @@ class MainActivity : ComponentActivity() {
 }
 
 // ---------- Палитра и стили ----------
-val Cyan = Color(0xFF00E5FF); val Pink = Color(0xFFFF4081); val Gold = Color(0xFFFFD700)
+val Cyan = Color(0xFF50F6FF); val Pink = Color(0xFFFF4D9D); val Gold = Color(0xFFFFD166)
+private val SpaceBg = Color(0xFF050914)
+private val Panel = Color(0xFF0D1728)
+private val Muted = Color(0xFF91A4C2)
 private val Title = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
 private val Card12 = RoundedCornerShape(16.dp)
 
@@ -118,14 +125,14 @@ fun App(vm: GameViewModel) {
         title = { Text("Пока вас не было...") },
         text = { Text("Заработано: ${fmt(s.offlineGain)}", color = Gold, fontSize = 20.sp) })
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF2A0A5E), Color(0xFF0D1B4D), Color(0xFF020208))))) {
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF101D38), SpaceBg, Color(0xFF03050B))))) {
         Starfield()
         Scaffold(containerColor = Color.Transparent, bottomBar = {
-            NavigationBar(containerColor = Color(0xAA050212)) {
+            NavigationBar(containerColor = Color(0xF20A1020), tonalElevation = 0.dp) {
                 tabs.forEachIndexed { i, (e, n) ->
                     NavigationBarItem(selected = tab == i, onClick = { tab = i },
                         icon = { Icon(e, null) }, label = { Text(n, fontSize = 10.sp) },
-                        colors = NavigationBarItemDefaults.colors(indicatorColor = Cyan.copy(alpha = 0.25f), selectedTextColor = Cyan))
+                        colors = NavigationBarItemDefaults.colors(indicatorColor = Cyan.copy(alpha = 0.18f), selectedTextColor = Cyan, unselectedTextColor = Muted))
                 }
             }
         }) { pad ->
@@ -339,18 +346,59 @@ fun AchievementsScreen(s: GameState) {
 }
 
 @Composable
+@Composable
+fun GameHeader(compact: Boolean = false) {
+    Row(
+        Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.size(if (compact) 36.dp else 42.dp).clip(RoundedCornerShape(13.dp))
+                .background(Brush.linearGradient(listOf(Cyan.copy(alpha = 0.28f), Color(0xFF3541A5).copy(alpha = 0.25f)))),
+                contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.RocketLaunch, null, tint = Cyan, modifier = Modifier.size(if (compact) 21.dp else 25.dp))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text("SPACE TYCOON", style = Title.copy(fontSize = if (compact) 15.sp else 18.sp, color = Color.White, letterSpacing = 2.sp))
+                Text("EXPAND YOUR UNIVERSE", color = Muted, fontSize = 9.sp, letterSpacing = 1.5.sp)
+            }
+        }
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Box(Modifier.clip(RoundedCornerShape(50)).background(Cyan.copy(alpha = 0.12f))
+                .border(1.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 5.dp)) {
+                Text("ALPHA 3.0", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+            }
+            Text("BUILD 003", color = Muted, fontSize = 8.sp, letterSpacing = 1.sp)
+        }
+    }
+}
+
+@Composable
 fun MainContent(vm: GameViewModel, s: GameState) {
     val land = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    if (land) Row(Modifier.fillMaxSize().padding(16.dp), Arrangement.spacedBy(24.dp), Alignment.CenterVertically) {
-        PlanetView(vm, s, Modifier.size(260.dp))
-        Column(Modifier.weight(1f), Arrangement.spacedBy(14.dp), Alignment.CenterHorizontally) {
+    if (land) Row(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp), Arrangement.spacedBy(22.dp), Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            GameHeader(compact = true)
+            PlanetView(vm, s, Modifier.size(245.dp))
+            Text(skinName(s.total).uppercase(), color = Muted, fontSize = 10.sp, letterSpacing = 2.sp)
+        }
+        Column(Modifier.weight(1f), Arrangement.spacedBy(16.dp), Alignment.CenterHorizontally) {
             Hud(vm, s); ComboBar(vm, s); PrestigeButton(vm, s)
         }
-    } else Column(Modifier.fillMaxSize().padding(16.dp), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
-        Hud(vm, s)
-        PlanetView(vm, s)
-        Text(skinName(s.total), color = Color(0x99FFFFFF), fontSize = 12.sp, letterSpacing = 2.sp)
-        ComboBar(vm, s); PrestigeButton(vm, s)
+    } else Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 10.dp), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
+        GameHeader()
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xAA14243D), Color(0x33202B48))))
+            .border(1.dp, Color(0x334FEFFF), RoundedCornerShape(24.dp)).padding(vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Hud(vm, s)
+        }
+        PlanetView(vm, s, Modifier.size(270.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(skinName(s.total).uppercase(), color = Muted, fontSize = 10.sp, letterSpacing = 2.sp)
+            ComboBar(vm, s)
+            PrestigeButton(vm, s)
+        }
     }
 }
 
@@ -358,8 +406,18 @@ fun MainContent(vm: GameViewModel, s: GameState) {
 fun UpgradesScreen(vm: GameViewModel, s: GameState) {
     var qty by remember { mutableIntStateOf(1) }
     val sections = listOf("ЗА ТАП" to Kind.TAP, "ПАССИВНЫЙ ДОХОД" to Kind.PASSIVE, "МНОЖИТЕЛИ" to Kind.MULT, "УТИЛИТЫ" to Kind.CRIT)
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { Balance(fmt(s.credits), 26.sp) }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { GameHeader(compact = true) }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                .background(Brush.horizontalGradient(listOf(Color(0xFF142943), Color(0xFF171C3A))))
+                .border(1.dp, Cyan.copy(alpha = 0.22f), RoundedCornerShape(20.dp)).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("КАЗНА КОЛОНИИ", color = Muted, fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+                Balance(fmt(s.credits), 30.sp)
+                Text("Покупай технологии. Расширяй империю.", color = Color(0xFFB5C6DF), fontSize = 12.sp)
+            }
+        }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(1, 5, 10, 25, -1).forEach { v ->
@@ -436,9 +494,17 @@ fun StatsScreen(s: GameState) {
 fun SettingsScreen(vm: GameViewModel, s: GameState) {
     var confirm by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        GameHeader(compact = true)
         Text("Настройки", style = Title.copy(fontSize = 26.sp))
         Row(Modifier.fillMaxWidth().glass().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Text("Вибрация"); Switch(checked = s.vibrate, onCheckedChange = vm::setVibrate)
+        }
+        Row(Modifier.fillMaxWidth().glass(Cyan.copy(alpha = 0.25f)).padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("SPACE TYCOON", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text("Версия alpha 3.0 · тестовая сборка", color = Muted, fontSize = 12.sp)
+            }
+            Icon(Icons.Filled.RocketLaunch, null, tint = Cyan, modifier = Modifier.size(24.dp))
         }
         Button(onClick = { confirm = true }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C))) { Text("Сбросить прогресс") }
