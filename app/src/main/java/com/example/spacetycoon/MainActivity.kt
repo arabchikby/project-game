@@ -356,7 +356,7 @@ fun MeteorLayer(vm: GameViewModel) {
 fun AchievementsScreen(s: GameState) {
     val done = achCount(s)
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Достижения", style = Title.copy(fontSize = 26.sp))
+        Text("Достижения", color = Color.White, style = Title.copy(fontSize = 26.sp, color = Color.White))
         Text("$done / ${ACHS.size} · +$done% к доходу", color = Gold, fontWeight = FontWeight.Bold)
         LazyVerticalGrid(GridCells.Adaptive(104.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(ACHS) { a ->
@@ -364,8 +364,8 @@ fun AchievementsScreen(s: GameState) {
                 Column(Modifier.glass(if (ok) Gold.copy(alpha = 0.8f) else Color(0x22FFFFFF)).padding(10.dp).alpha(if (ok) 1f else 0.4f),
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(ACH_ICONS[ACHS.indexOf(a)], null, tint = if (ok) Gold else Color.White, modifier = Modifier.size(32.dp))
-                    Text(a.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                    Text(a.desc, fontSize = 10.sp, color = Color(0xAAFFFFFF), textAlign = TextAlign.Center)
+                    Text(a.name, fontSize = 12.sp, color = if (ok) Color.White else Color(0xFFD6D5E8), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Text(a.desc, fontSize = 10.sp, color = Color(0xFFD6D5E8), textAlign = TextAlign.Center)
                 }
             }
         }
@@ -486,7 +486,7 @@ fun StatsScreen(s: GameState) {
         Triple(Icons.Filled.Star, "Звёздная пыль", s.dust.toString()), Triple(Icons.Filled.Cached, "Престижей", s.prestiges.toString()),
         Triple(Icons.Filled.Timer, "Время в игре", "${s.playSeconds / 60} мин"), Triple(Icons.Filled.TrackChanges, "Метеоритов", s.meteors.toString()))
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Статистика", style = Title.copy(fontSize = 26.sp))
+        Text("Статистика", color = Color.White, style = Title.copy(fontSize = 26.sp, color = Color.White))
         rows.chunked(2).forEach { pair ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEach { (ic, k, v) ->
@@ -574,7 +574,7 @@ fun SettingsScreen(vm: GameViewModel, s: GameState) {
             Icon(Icons.Filled.Restore, null); Spacer(Modifier.width(8.dp)); Text("Восстановить сохранение")
         }
         Button(onClick = { confirm = true }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C))) { Text("Сбросить прогресс") }
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C), contentColor = Color.White)) { Text("Сбросить прогресс", color = Color.White) }
     }
     transferMessage?.let { message ->
         AlertDialog(onDismissRequest = { transferMessage = null }, containerColor = Color(0xFF14103A),
@@ -582,9 +582,9 @@ fun SettingsScreen(vm: GameViewModel, s: GameState) {
             confirmButton = { TextButton(onClick = { transferMessage = null }) { Text("ОК", color = Cyan) } })
     }
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, containerColor = Color(0xFF14103A),
-        title = { Text("Сбросить всё?") }, text = { Text("Прогресс будет удалён безвозвратно.") },
+        title = { Text("Сбросить всё?", color = Color.White) }, text = { Text("Прогресс будет удалён безвозвратно.", color = Color(0xFFD6D5E8)) },
         confirmButton = { TextButton(onClick = { vm.reset(); confirm = false }) { Text("Да", color = Pink) } },
-        dismissButton = { TextButton(onClick = { confirm = false }) { Text("Отмена") } })
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text("Отмена", color = Color.White) } })
 }
 
 class Rock(val id: Int, val x: Float, val born: Long)
