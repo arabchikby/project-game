@@ -66,10 +66,18 @@ fun price(u: Upgrade, count: Int) = u.base * 1.15.pow(count)
 
 /** Форматирование чисел: K, M, B, T, Qa, Qi */
 fun fmt(v: Double): String {
-    val s = listOf("", "K", "M", "B", "T", "Qa", "Qi")
-    var x = v; var i = 0
-    while (x >= 1000 && i < s.lastIndex) { x /= 1000; i++ }
-    return if (i == 0) x.toLong().toString() else String.format(Locale.US, "%.1f%s", x, s[i])
+    val suffixes = listOf("", "K", "M", "B", "T", "Qa", "Qi")
+    if (!v.isFinite()) return "0"
+    var x = v.coerceAtLeast(0.0)
+    var i = 0
+    // Promote values that would round to 1000.0K / 1000.0M, etc.
+    // This keeps 999,999 displayed as 1.0M instead of 1000.0K.
+    while (i < suffixes.lastIndex && (x >= 1000.0 || (i > 0 && x >= 999.95))) {
+        x /= 1000.0
+        i++
+    }
+    return if (i == 0) x.toLong().toString()
+    else String.format(Locale.US, "%.1f%s", x, suffixes[i])
 }
 
 /** Цена за q штук подряд: сумма геометрической прогрессии base*1.15^(n..n+q-1) */

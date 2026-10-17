@@ -556,14 +556,14 @@ fun SettingsScreen(vm: GameViewModel, s: GameState) {
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Настройки", style = Title.copy(fontSize = 26.sp))
+        Text("Настройки", color = Color.White, style = Title.copy(fontSize = 26.sp, color = Color.White))
         val ver = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" }
         Text("Космический Магнат · $ver", color = Color(0x99FFFFFF), fontSize = 12.sp)
         Row(Modifier.fillMaxWidth().glass().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text("Вибрация"); Switch(checked = s.vibrate, onCheckedChange = vm::setVibrate)
+            Text("Вибрация", color = Color.White, fontSize = 18.sp); Switch(checked = s.vibrate, onCheckedChange = vm::setVibrate)
         }
         Row(Modifier.fillMaxWidth().glass().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text("Звуки"); Switch(checked = s.sound, onCheckedChange = vm::setSound)
+            Text("Звуки", color = Color.White, fontSize = 18.sp); Switch(checked = s.sound, onCheckedChange = vm::setSound)
         }
         Text("Резервная копия", color = Cyan, style = Title.copy(fontSize = 18.sp))
         Text("Чтобы прогресс пережил удаление игры, сохрани файл в папку «Загрузки» или облако. После установки выбери этот файл для восстановления.", color = Color.LightGray, fontSize = 13.sp)
@@ -658,12 +658,17 @@ fun PetCard(vm: GameViewModel, s: GameState) {
     Row(Modifier.fillMaxWidth().glass(green.copy(alpha = 0.7f)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(green.copy(alpha = 0.4f), Color(0x22000000)))),
             contentAlignment = Alignment.Center) { Icon(Icons.Filled.Pets, null, tint = Color(0xFF69F0AE), modifier = Modifier.size(30.dp)) }
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(if (s.pet == 0) "Космо-питомец: яйцо" else "Космо-питомец · ур. ${s.pet}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            Text("Сейчас +${s.pet * 5}% ко всему · каждый уровень +5%", fontSize = 12.sp, color = Color(0xAAFFFFFF))
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Космо-питомец", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false)
+                Box(Modifier.clip(RoundedCornerShape(7.dp)).background(Color(0x3348E8C1)).padding(horizontal = 7.dp, vertical = 3.dp)) {
+                    Text(if (s.pet == 0) "Яйцо" else "Ур. ${s.pet}", color = Color(0xFF8FFFD7), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
+                }
+            }
+            Text("Сейчас +${s.pet * 5}% ко всему · каждый уровень +5%", fontSize = 12.sp, color = Color(0xFFD8D5F5))
         }
         Button(enabled = s.credits >= cost, shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = green, contentColor = Color.Black),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF168F9D), contentColor = Color.White),
             onClick = { if (vm.feedPet() && s.sound) Sfx.play(Sfx.BUY) }) {
             Text((if (s.pet == 0) "Вылупить " else "Кормить ") + fmt(cost), fontWeight = FontWeight.Bold)
         }
