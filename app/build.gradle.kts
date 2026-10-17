@@ -9,8 +9,8 @@ android {
         applicationId = "com.example.spacetycoon"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "alpha 4.0 by arabchikby"
+        versionCode = 5
+        versionName = "alpha 5.0 by arabchikby"
     }
     buildTypes {
         release {

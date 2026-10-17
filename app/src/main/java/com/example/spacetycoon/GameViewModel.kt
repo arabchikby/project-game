@@ -43,6 +43,8 @@ data class GameState(
     val dailyDay: Long = 0,       // день, когда забрали ежедневный бонус
     val streak: Int = 0,          // серия дней подряд
     val loaded: Boolean = false,  // сохранение уже загружено
+    val pet: Int = 0,             // уровень космо-питомца (+5% ко всему за уровень)
+    val sound: Boolean = true,    // звуки включены
 )
 
 class GameViewModel(app: Application) : AndroidViewModel(app) {
@@ -60,13 +62,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val TAPS = longPreferencesKey("taps"); val CRITS = longPreferencesKey("crits")
         val BEST = intPreferencesKey("best"); val DUST = intPreferencesKey("dust")
         val PRES = intPreferencesKey("pres"); val PLAY = longPreferencesKey("play")
-        val MET = longPreferencesKey("met"); val DAILY = longPreferencesKey("daily"); val STREAK = intPreferencesKey("streak"); val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last"); val BOOST = longPreferencesKey("boost")
+        val MET = longPreferencesKey("met"); val DAILY = longPreferencesKey("daily"); val STREAK = intPreferencesKey("streak"); val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last"); val BOOST = longPreferencesKey("boost"); val PET = intPreferencesKey("pet"); val SND = booleanPreferencesKey("snd")
         const val MAX_OFFLINE_SEC = 30L   // оффлайн-доход не больше, чем за 30 секунд
     }
 
     // ---------- Формулы ----------
     fun mult(s: GameState): Double {
-        var m = (1.0 + 0.05 * s.dust) * (1.0 + 0.01 * achCount(s))   // пыль +5%, достижения +1%
+        var m = (1.0 + 0.05 * s.dust) * (1.0 + 0.01 * achCount(s)) * (1.0 + 0.05 * s.pet)   // пыль +5%, достижения +1%
         UPGRADES.filter { it.kind == Kind.MULT && (s.counts[it.id] ?: 0) > 0 }.forEach { m *= it.value }
         if (System.currentTimeMillis() < s.boostUntil) m *= 10
         return m
@@ -155,6 +157,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Космо-питомец: каждый уровень даёт +5% ко всему, кормёжка дорожает в 1.9 раза */
+    fun petCost(level: Int) = 5_000.0 * 1.9.pow(level)
+    fun feedPet(): Boolean {
+        val s = _s.value
+        val c = petCost(s.pet)
+        if (s.credits < c) return false
+        _s.update { it.copy(credits = it.credits - c, pet = it.pet + 1) }
+        return true
+    }
+    fun setSound(v: Boolean) = _s.update { it.copy(sound = v) }
+
     fun setVibrate(v: Boolean) = _s.update { it.copy(vibrate = v) }
     fun dismissOffline() = _s.update { it.copy(offlineGain = 0.0) }
     fun reset() { _s.value = GameState(loaded = true); save() }
@@ -170,7 +183,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         json.put("taps", s.taps); json.put("crits", s.crits); json.put("bestCombo", s.bestCombo)
         json.put("dust", s.dust); json.put("prestiges", s.prestiges); json.put("playSeconds", s.playSeconds)
         json.put("vibrate", s.vibrate); json.put("meteors", s.meteors); json.put("boostUntil", s.boostUntil)
-        json.put("dailyDay", s.dailyDay); json.put("streak", s.streak)
+        json.put("dailyDay", s.dailyDay); json.put("streak", s.streak); json.put("pet", s.pet); json.put("sound", s.sound)
         json.put("savedAt", System.currentTimeMillis())
         return json.toString(2)
     }
@@ -205,6 +218,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 boostUntil = j.optLong("boostUntil", 0).coerceAtLeast(0),
                 dailyDay = j.optLong("dailyDay", 0).coerceAtLeast(0),
                 streak = j.optInt("streak", 0).coerceAtLeast(0),
+                pet = j.optInt("pet", 0).coerceAtLeast(0), sound = j.optBoolean("sound", true),
                 offlineGain = 0.0, loaded = true
             )
             _s.value = restored
@@ -215,7 +229,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     it[TAPS] = restored.taps; it[CRITS] = restored.crits; it[BEST] = restored.bestCombo
                     it[DUST] = restored.dust; it[PRES] = restored.prestiges; it[PLAY] = restored.playSeconds
                     it[MET] = restored.meteors; it[DAILY] = restored.dailyDay; it[STREAK] = restored.streak
-                    it[VIB] = restored.vibrate; it[BOOST] = restored.boostUntil
+                    it[VIB] = restored.vibrate; it[BOOST] = restored.boostUntil; it[PET] = restored.pet; it[SND] = restored.sound
                     it[LAST] = System.currentTimeMillis()
                 }
             }
@@ -286,7 +300,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     it[TAPS] = s.taps; it[CRITS] = s.crits; it[BEST] = s.bestCombo
                     it[DUST] = s.dust; it[PRES] = s.prestiges; it[PLAY] = s.playSeconds
                     it[MET] = s.meteors; it[DAILY] = s.dailyDay; it[STREAK] = s.streak
-                    it[VIB] = s.vibrate; it[BOOST] = s.boostUntil
+                    it[VIB] = s.vibrate; it[BOOST] = s.boostUntil; it[PET] = s.pet; it[SND] = s.sound
                     it[LAST] = System.currentTimeMillis()
                 }
                 // Копия в Downloads не удаляется вместе с приложением.
@@ -303,7 +317,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             var s = GameState(p[CREDITS] ?: 0.0, p[TOTAL] ?: 0.0, p[RUN] ?: 0.0, counts,
                 p[TAPS] ?: 0, p[CRITS] ?: 0, p[BEST] ?: 0, p[DUST] ?: 0, p[PRES] ?: 0,
                 p[PLAY] ?: 0, 0, p[VIB] ?: true)
-            s = s.copy(meteors = p[MET] ?: 0L, dailyDay = p[DAILY] ?: 0L, streak = p[STREAK] ?: 0, boostUntil = p[BOOST] ?: 0L)
+            s = s.copy(meteors = p[MET] ?: 0L, dailyDay = p[DAILY] ?: 0L, streak = p[STREAK] ?: 0, boostUntil = p[BOOST] ?: 0L, pet = p[PET] ?: 0, sound = p[SND] ?: true)
             // Оффлайн-доход (макс. 8 часов)
             val last = p[LAST] ?: 0L
             if (last > 0) {

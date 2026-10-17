@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
     private val vm: GameViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Sfx.init(applicationContext)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Pink, tertiary = Gold)) { App(vm) }
         }
@@ -111,7 +112,7 @@ fun App(vm: GameViewModel) {
     LaunchedEffect(Unit) { delay(1500); ready = true }
     LaunchedEffect(Unit) { vm.events.collect { banner = it; delay(2500); banner = null } }
     LaunchedEffect(ach) {
-        if (ready && ach > seen) { banner = "Достижение получено! +1% к доходу"; delay(2500); banner = null }
+        if (ready && ach > seen) { if (s.sound) Sfx.play(Sfx.BUY); banner = "Достижение получено! +1% к доходу"; delay(2500); banner = null }
         seen = ach
     }
     val tabs = listOf(Icons.Filled.Public to "Игра", Icons.Filled.ShoppingCart to "Апгрейды", Icons.Filled.EmojiEvents to "Награды", Icons.Filled.BarChart to "Статистика", Icons.Filled.Settings to "Настройки")
@@ -149,11 +150,27 @@ fun App(vm: GameViewModel) {
 @Composable
 fun Starfield() {
     val stars = remember { List(90) { Triple(Random.nextFloat(), Random.nextFloat(), Random.nextFloat()) } }
-    val t by rememberInfiniteTransition(label = "stars").animateFloat(0f, 1f, infiniteRepeatable(tween(5000, easing = LinearEasing)), label = "t")
+    val inf = rememberInfiniteTransition(label = "stars")
+    val t by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(5000, easing = LinearEasing)), label = "t")
+    val drift by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(30000, easing = LinearEasing), RepeatMode.Reverse), label = "d")
+    val shoot by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "s")
     Canvas(Modifier.fillMaxSize()) {
+        // Две туманности медленно плывут по фону
+        val n1 = Offset(size.width * (0.2f + 0.3f * drift), size.height * 0.25f)
+        val n2 = Offset(size.width * (0.8f - 0.3f * drift), size.height * 0.75f)
+        drawCircle(Brush.radialGradient(listOf(Color(0x44B040FF), Color.Transparent), n1, size.width * 0.7f), size.width * 0.7f, n1)
+        drawCircle(Brush.radialGradient(listOf(Color(0x3300E5FF), Color.Transparent), n2, size.width * 0.8f), size.width * 0.8f, n2)
         stars.forEach { (x, y, p) ->
             val a = 0.25f + 0.75f * abs(sin((t + p) * 2 * PI)).toFloat()
             drawCircle(Color.White.copy(alpha = a), (0.6f + p * 1.8f) * density, Offset(x * size.width, y * size.height))
+        }
+        // Падающая звезда раз в 9 секунд
+        if (shoot < 0.25f) {
+            val k = shoot / 0.25f
+            val x = size.width * (1.1f - 1.2f * k); val y = size.height * (0.1f + 0.35f * k)
+            val tail = Offset(x + 120.dp.toPx(), y - 40.dp.toPx())
+            drawLine(Brush.linearGradient(listOf(Color.White.copy(alpha = 1f - k), Color.Transparent), Offset(x, y), tail),
+                Offset(x, y), tail, strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
         }
     }
 }
@@ -180,6 +197,7 @@ fun PlanetView(vm: GameViewModel, s: GameState, modifier: Modifier = Modifier.si
                 vm.tap()
                 val st = vm.state.value
                 if (st.vibrate) view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                if (st.sound) Sfx.play(if (st.lastCrit > 0) Sfx.CRIT else Sfx.TAP)
                 val txt = (if (st.lastCrit > 0) "КРИТ! x${st.lastCrit}\n" else "") + "+" + fmt(st.lastGain)
                 fx.add(Fx(now, p.x, p.y, txt, st.lastCrit > 0, List(10) { Random.nextFloat() * 6.283f }))
                 scope.launch { pulse.snapTo(0.9f); pulse.animateTo(1f, spring(Spring.DampingRatioMediumBouncy)) }
@@ -206,6 +224,18 @@ fun PlanetView(vm: GameViewModel, s: GameState, modifier: Modifier = Modifier.si
             rotate(-20f, c) {   // передняя половина кольца и челнок перед планетой
                 drawArc(Color.White.copy(alpha = 0.55f), 0f, 180f, false, ringTL, ringSz, style = Stroke(3.5f.dp.toPx()))
                 if (sin(sa) >= 0) drawCircle(Gold, 5.dp.toPx(), Offset(c.x + cos(sa) * r * 1.35f, c.y + sin(sa) * r * 0.35f))
+            }
+            if (s.pet > 0) {   // космо-питомец парит рядом с планетой
+                val pr = r * (0.14f + minOf(s.pet, 20) * 0.004f)
+                val pc = Offset(c.x - r * 1.1f, c.y + r * 0.95f + sin(sa * 3) * 6f)
+                val green = Color(0xFF00C853)
+                drawLine(green, Offset(pc.x, pc.y - pr), Offset(pc.x + pr * 0.2f, pc.y - pr * 1.5f), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+                drawCircle(Gold, pr * 0.18f, Offset(pc.x + pr * 0.2f, pc.y - pr * 1.5f))
+                drawCircle(Brush.radialGradient(listOf(Color(0xFFB9F6CA), green), pc, pr), pr, pc)
+                listOf(-0.35f, 0.35f).forEach { dx ->
+                    drawCircle(Color.White, pr * 0.28f, Offset(pc.x + dx * pr, pc.y - pr * 0.1f))
+                    drawCircle(Color.Black, pr * 0.13f, Offset(pc.x + dx * pr, pc.y - pr * 0.1f))
+                }
             }
             fx.forEach { f ->
                 val age = ((now - f.born) / 900f).coerceIn(0f, 1f)
@@ -270,7 +300,7 @@ fun ComboBar(vm: GameViewModel, s: GameState) {
 @Composable
 fun PrestigeButton(vm: GameViewModel, s: GameState) {
     val gain = vm.prestigeGain(s)
-    Button(onClick = vm::prestige, enabled = gain >= 1, shape = RoundedCornerShape(50),
+    Button(onClick = { vm.prestige(); if (s.sound) Sfx.play(Sfx.PRESTIGE) }, enabled = gain >= 1, shape = RoundedCornerShape(50),
         colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black,
             disabledContainerColor = Color(0x22FFFFFF), disabledContentColor = Color.Gray)) {
         Text(if (gain >= 1) "Престиж: +$gain пыли" else "Престиж с 1M за забег", fontWeight = FontWeight.Bold)
@@ -307,7 +337,7 @@ fun MeteorLayer(vm: GameViewModel) {
             Modifier.offset { IntOffset((prog.value * (w + 200f) - 100f).roundToInt(), (yFrac * h + sin(prog.value * 9f) * 30f).roundToInt()) }
                 .size(64.dp).background(Brush.radialGradient(listOf(Gold.copy(alpha = 0.7f), Color.Transparent)), CircleShape)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    msg = "Метеорит! " + vm.catchMeteor(); visible = false
+                    msg = "Метеорит! " + vm.catchMeteor(); visible = false; if (vm.state.value.sound) Sfx.play(Sfx.METEOR)
                 }, contentAlignment = Alignment.Center) {
                     Canvas(Modifier.fillMaxSize()) {
                         val c = center
@@ -361,6 +391,7 @@ fun MainContent(vm: GameViewModel, s: GameState) {
 @Composable
 fun UpgradesScreen(vm: GameViewModel, s: GameState) {
     var qty by remember { mutableIntStateOf(1) }
+    val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "p")
     val sections = listOf("ЗА ТАП" to Kind.TAP, "ПАССИВНЫЙ ДОХОД" to Kind.PASSIVE, "МНОЖИТЕЛИ" to Kind.MULT, "УТИЛИТЫ" to Kind.CRIT)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { Balance(fmt(s.credits), 26.sp) }
@@ -375,6 +406,7 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
                 }
             }
         }
+        item { PetCard(vm, s) }
         sections.forEach { (title, kind) ->
             item { Text(title, color = Color(0xAAFFFFFF), fontSize = 12.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 8.dp)) }
             items(UPGRADES.filter { it.kind == kind || (kind == Kind.CRIT && it.kind == Kind.UTIL) }) { u ->
@@ -389,7 +421,7 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
                     Kind.MULT -> "×${u.value} ко всему"; Kind.CRIT -> "+5% к шансу крита"
                     Kind.UTIL -> when (u.id) { 19 -> "метеориты чаще"; 20 -> "награда метеоритов x2"; else -> "прогноз дохода" }
                 }
-                Row(Modifier.fillMaxWidth().glass(if (n > 0) accent.copy(alpha = 0.8f) else Color(0x33FFFFFF)).padding(12.dp),
+                Row(Modifier.fillMaxWidth().glass(if (!owned && s.credits >= p) accent.copy(alpha = pulse) else if (n > 0) accent.copy(alpha = 0.8f) else Color(0x33FFFFFF)).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(accent.copy(alpha = 0.4f), Color(0x22000000)))),
                         contentAlignment = Alignment.Center) { Icon(iconFor(u.id), null, tint = accent, modifier = Modifier.size(30.dp)) }
@@ -401,7 +433,7 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
                     }
                     Button(enabled = !owned && s.credits >= p, shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.Black),
-                        onClick = { vm.buy(u, qty) }) {
+                        onClick = { if (vm.buy(u, qty) && s.sound) Sfx.play(Sfx.BUY) }) {
                         Text(if (owned) "Есть" else (if (q > 1) "×$q · " else "") + fmt(p), fontWeight = FontWeight.Bold)
                     }
                 }
@@ -417,7 +449,7 @@ fun StatsScreen(s: GameState) {
         Triple(Icons.Filled.FlashOn, "Критов", s.crits.toString()), Triple(Icons.Filled.Whatshot, "Лучшее комбо", s.bestCombo.toString()),
         Triple(Icons.Filled.Star, "Звёздная пыль", s.dust.toString()), Triple(Icons.Filled.Cached, "Престижей", s.prestiges.toString()),
         Triple(Icons.Filled.Timer, "Время в игре", "${s.playSeconds / 60} мин"), Triple(Icons.Filled.TrackChanges, "Метеоритов", s.meteors.toString()))
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Статистика", style = Title.copy(fontSize = 26.sp))
         rows.chunked(2).forEach { pair ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -431,6 +463,19 @@ fun StatsScreen(s: GameState) {
                     }
                 }
                 if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+        // Локальный рейтинг: соперники растут вместе со временем в игре
+        Text("Рейтинг магнатов", style = Title.copy(fontSize = 20.sp, color = Gold), modifier = Modifier.padding(top = 8.dp))
+        val rivals = listOf("Звёздный Волк" to 2e4, "Капитан Нова" to 8e5, "Лорд Квазар" to 4e7,
+            "Мадам Орбита" to 3e9, "Тёмный Барон" to 2e11, "Император Зет" to 5e13)
+        val hours = s.playSeconds / 3600.0
+        val board = (rivals.map { (name, base) -> name to base * (1 + 0.6 * hours) } + ("Вы" to s.total)).sortedByDescending { it.second }
+        board.forEachIndexed { i, (name, v) ->
+            val me = name == "Вы"
+            Row(Modifier.fillMaxWidth().glass(if (me) Gold else Color(0x22FFFFFF)).padding(horizontal = 14.dp, vertical = 10.dp), Arrangement.SpaceBetween) {
+                Text("${i + 1}. $name", fontWeight = if (me) FontWeight.Black else FontWeight.Normal, color = if (me) Gold else Color.White)
+                Text(fmt(v), color = if (me) Gold else Cyan, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -474,10 +519,15 @@ fun SettingsScreen(vm: GameViewModel, s: GameState) {
             }
         }
     }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Настройки", style = Title.copy(fontSize = 26.sp))
+        val ver = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" }
+        Text("Космический Магнат · $ver", color = Color(0x99FFFFFF), fontSize = 12.sp)
         Row(Modifier.fillMaxWidth().glass().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Text("Вибрация"); Switch(checked = s.vibrate, onCheckedChange = vm::setVibrate)
+        }
+        Row(Modifier.fillMaxWidth().glass().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            Text("Звуки"); Switch(checked = s.sound, onCheckedChange = vm::setSound)
         }
         Text("Резервная копия", color = Cyan, style = Title.copy(fontSize = 18.sp))
         Text("Чтобы прогресс пережил удаление игры, сохрани файл в папку «Загрузки» или облако. После установки выбери этот файл для восстановления.", color = Color.LightGray, fontSize = 13.sp)
@@ -560,6 +610,26 @@ fun StormLayer(vm: GameViewModel) {
         msg?.let {
             Text(it, Modifier.align(Alignment.TopCenter).padding(top = 150.dp), color = Pink, textAlign = TextAlign.Center,
                 style = Title.copy(fontSize = 16.sp, shadow = Shadow(Pink, blurRadius = 20f)))
+        }
+    }
+}
+
+/** Карточка космо-питомца: кормишь кредитами, он даёт +5% ко всему за уровень */
+@Composable
+fun PetCard(vm: GameViewModel, s: GameState) {
+    val cost = vm.petCost(s.pet)
+    val green = Color(0xFF00E676)
+    Row(Modifier.fillMaxWidth().glass(green.copy(alpha = 0.7f)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(green.copy(alpha = 0.4f), Color(0x22000000)))),
+            contentAlignment = Alignment.Center) { Icon(Icons.Filled.Pets, null, tint = Color(0xFF69F0AE), modifier = Modifier.size(30.dp)) }
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(if (s.pet == 0) "Космо-питомец: яйцо" else "Космо-питомец · ур. ${s.pet}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("Сейчас +${s.pet * 5}% ко всему · каждый уровень +5%", fontSize = 12.sp, color = Color(0xAAFFFFFF))
+        }
+        Button(enabled = s.credits >= cost, shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = green, contentColor = Color.Black),
+            onClick = { if (vm.feedPet() && s.sound) Sfx.play(Sfx.BUY) }) {
+            Text((if (s.pet == 0) "Вылупить " else "Кормить ") + fmt(cost), fontWeight = FontWeight.Bold)
         }
     }
 }
