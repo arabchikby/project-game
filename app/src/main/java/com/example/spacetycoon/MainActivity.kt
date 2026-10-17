@@ -421,20 +421,56 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
                     Kind.MULT -> "×${u.value} ко всему"; Kind.CRIT -> "+5% к шансу крита"
                     Kind.UTIL -> when (u.id) { 19 -> "метеориты чаще"; 20 -> "награда метеоритов x2"; else -> "прогноз дохода" }
                 }
-                Row(Modifier.fillMaxWidth().glass(if (!owned && s.credits >= p) accent.copy(alpha = pulse) else if (n > 0) accent.copy(alpha = 0.8f) else Color(0x33FFFFFF)).padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(accent.copy(alpha = 0.4f), Color(0x22000000)))),
-                        contentAlignment = Alignment.Center) { Icon(iconFor(u.id), null, tint = accent, modifier = Modifier.size(30.dp)) }
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(u.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text("$desc · ×$n", fontSize = 12.sp, color = Color(0xAAFFFFFF))
-                        LinearProgressIndicator(progress = { prog }, color = if (prog >= 1f) accent else Color(0x66FFFFFF),
-                            trackColor = Color(0x22FFFFFF), modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)))
+                val cardShape = RoundedCornerShape(28.dp)
+                val canBuy = !owned && s.credits >= p
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clip(cardShape)
+                        .background(Brush.linearGradient(listOf(Color(0xFF082A5B), Color(0xFF041638), Color(0xFF061D43))))
+                        .border(1.5.dp, if (canBuy) Cyan.copy(alpha = pulse) else Color(0xFF2676B8), cardShape)
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        Modifier.size(68.dp).clip(RoundedCornerShape(22.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFF07518A), Color(0xFF06264F))))
+                            .border(1.dp, Color(0xFF168FD0), RoundedCornerShape(22.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(iconFor(u.id), null, tint = accent, modifier = Modifier.size(36.dp))
                     }
-                    Button(enabled = !owned && s.credits >= p, shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.Black),
-                        onClick = { if (vm.buy(u, qty) && s.sound) Sfx.play(Sfx.BUY) }) {
-                        Text(if (owned) "Есть" else (if (q > 1) "×$q · " else "") + fmt(p), fontWeight = FontWeight.Bold)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text(u.name, fontWeight = FontWeight.SemiBold, fontSize = 17.sp,
+                            color = Color(0xFFF4F8FF), maxLines = 2, lineHeight = 20.sp)
+                        Text("$desc · ×$n", fontSize = 12.sp, color = Color(0xFFB5D4F5), maxLines = 1)
+                        Box(
+                            Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(50))
+                                .background(Color(0xFF123D6B))
+                                .border(0.7.dp, Color(0xFF286BA2), RoundedCornerShape(50))
+                        ) {
+                            Box(
+                                Modifier.fillMaxWidth(prog).fillMaxHeight().clip(RoundedCornerShape(50))
+                                    .background(Brush.horizontalGradient(listOf(Color(0xFF00D9FF), Color(0xFF168BFF))))
+                            )
+                        }
+                    }
+                    Column(
+                        Modifier.widthIn(min = 84.dp, max = 124.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Brush.verticalGradient(listOf(Color(0xFF164B85), Color(0xFF0A2C58))))
+                            .border(1.5.dp, if (canBuy) Color(0xFF20BFFF) else Color(0xFF245B91), RoundedCornerShape(20.dp))
+                            .clickable(enabled = canBuy || owned) {
+                                if (canBuy && vm.buy(u, qty) && s.sound) Sfx.play(Sfx.BUY)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 15.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(if (owned) "ЕСТЬ" else "✦ ${if (q > 1) "×$q · " else ""}${fmt(p)}",
+                            fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                            color = if (canBuy) Color(0xFFB8F5FF) else Color(0xFF7FA6CE),
+                            textAlign = TextAlign.Center, maxLines = 2, lineHeight = 17.sp)
                     }
                 }
             }

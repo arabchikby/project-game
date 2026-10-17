@@ -258,6 +258,31 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         return null
     }
 
+    /** Удаляет только старые дубликаты резервных копий этой игры в Downloads. */
+    private fun cleanupExternalBackups() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val resolver = getApplication<Application>().contentResolver
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
+        resolver.query(
+            collection, projection,
+            "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+            arrayOf("SpaceTycoon_save%.json", "${Environment.DIRECTORY_DOWNLOADS}/"),
+            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        )?.use { cursor ->
+            val idsToDelete = mutableListOf<Long>()
+            val names = mutableListOf<Pair<Long, String>>()
+            while (cursor.moveToNext()) {
+                names += cursor.getLong(0) to cursor.getString(1)
+            }
+            // Оставляем канонический файл, а копии вида (1), (2) и т. п. удаляем.
+            names.filter { it.second != "SpaceTycoon_save.json" }.forEach { idsToDelete += it.first }
+            idsToDelete.forEach { id ->
+                runCatching { resolver.delete(Uri.withAppendedPath(collection, id.toString()), null, null) }
+            }
+        }
+    }
+
     private fun writeExternalBackup(json: String) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         val resolver = getApplication<Application>().contentResolver
@@ -311,6 +336,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
+            runCatching { cleanupExternalBackups() }
             val p = ds.data.first()
             val counts = (p[COUNTS] ?: "").split(",").filter { it.contains("=") }
                 .associate { it.substringBefore("=").toInt() to it.substringAfter("=").toInt() }

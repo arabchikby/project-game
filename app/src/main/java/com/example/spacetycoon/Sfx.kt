@@ -17,9 +17,20 @@ object Sfx {
 
     fun init(ctx: Context) {
         if (pool != null) return
+        // Удаляем остатки временных wav от старых запусков, если они остались после сбоя.
+        ctx.cacheDir.listFiles()?.filter { it.isFile && it.name.matches(Regex("sfx\\d+\\.wav")) }
+            ?.forEach { runCatching { it.delete() } }
+
         val sp = SoundPool.Builder().setMaxStreams(6)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build()
+        val tempFiles = mutableMapOf<Int, File>()
+        sp.setOnLoadCompleteListener { soundPool, sampleId, status ->
+            if (status == 0) {
+                // SoundPool уже загрузил звук в память — файл больше не нужен.
+                tempFiles.remove(sampleId)?.let { runCatching { it.delete() } }
+            }
+        }
         // (частота в начале Гц, частота в конце Гц, длительность мс, громкость)
         val specs = listOf(
             floatArrayOf(880f, 1100f, 45f, 0.35f),   // тап: «пик»
@@ -31,6 +42,7 @@ object Sfx {
             val f = File(ctx.cacheDir, "sfx$i.wav")
             f.writeBytes(wav(p[0], p[1], p[2].toInt(), p[3]))
             ids[i] = sp.load(f.path, 1)
+            tempFiles[ids[i]] = f
         }
         pool = sp
     }
