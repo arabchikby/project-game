@@ -12,10 +12,22 @@ android {
         versionCode = 5
         versionName = "alpha 5.0 by arabchikby"
     }
+    // Один и тот же ключ подписи для всех сборок: иначе каждая сборка в GitHub Actions
+    // получает новый случайный ключ и Android не даёт обновить приложение поверх старого.
+    signingConfigs {
+        create("shared") {
+            storeFile = file("spacetycoon.keystore")
+            storePassword = "spacetycoon"
+            keyAlias = "spacetycoon"
+            keyPassword = "spacetycoon"
+        }
+    }
     buildTypes {
+        debug { signingConfig = signingConfigs.getByName("shared") }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            signingConfig = signingConfigs.getByName("shared")
         }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
