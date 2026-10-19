@@ -97,8 +97,8 @@ fun skin(total: Double) = when {
     else -> listOf(Color(0xFFFFF59D), Color(0xFFFFB300), Color(0xFF5D3A00))
 }
 fun skinName(total: Double) = when {
-    total < 1e4 -> "Ржавый мир"; total < 1e6 -> "Океаническая"
-    total < 1e9 -> "Неоновая туманность"; else -> "Золотая планета"
+    total < 1e4 -> t("Ржавый мир"); total < 1e6 -> t("Океаническая")
+    total < 1e9 -> t("Неоновая туманность"); else -> t("Золотая планета")
 }
 
 @Composable
@@ -112,16 +112,16 @@ fun App(vm: GameViewModel) {
     LaunchedEffect(Unit) { delay(1500); ready = true }
     LaunchedEffect(Unit) { vm.events.collect { banner = it; delay(2500); banner = null } }
     LaunchedEffect(ach) {
-        if (ready && ach > seen) { if (s.sound) Sfx.play(Sfx.BUY); banner = "Достижение получено! +1% к доходу"; delay(2500); banner = null }
+        if (ready && ach > seen) { if (s.sound) Sfx.play(Sfx.BUY); banner = t("Достижение получено! +1% к доходу"); delay(2500); banner = null }
         seen = ach
     }
-    val tabs = listOf(Icons.Filled.Public to "Игра", Icons.Filled.ShoppingCart to "Апгрейды", Icons.Filled.EmojiEvents to "Награды", Icons.Filled.BarChart to "Статистика", Icons.Filled.Settings to "Настройки")
+    val tabs = listOf(Icons.Filled.Public to t("Игра"), Icons.Filled.ShoppingCart to t("Апгрейды"), Icons.Filled.EmojiEvents to t("Награды"), Icons.Filled.BarChart to t("Статистика"), Icons.Filled.Settings to t("Настройки"))
 
     if (s.offlineGain > 0) AlertDialog(
         onDismissRequest = vm::dismissOffline, containerColor = Color(0xFF14103A),
-        confirmButton = { TextButton(onClick = vm::dismissOffline) { Text("Забрать", color = Cyan) } },
-        title = { Text("Пока вас не было...") },
-        text = { Text("Заработано: ${fmt(s.offlineGain)}", color = Gold, fontSize = 20.sp) })
+        confirmButton = { TextButton(onClick = vm::dismissOffline) { Text(t("Забрать"), color = Cyan) } },
+        title = { Text(t("Пока вас не было...")) },
+        text = { Text(t("Заработано: {0}", fmt(s.offlineGain)), color = Gold, fontSize = 20.sp) })
 
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF2A0A5E), Color(0xFF0D1B4D), Color(0xFF020208))))) {
         Starfield()
@@ -198,7 +198,7 @@ fun PlanetView(vm: GameViewModel, s: GameState, modifier: Modifier = Modifier.si
                 val st = vm.state.value
                 if (st.vibrate) view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 if (st.sound) Sfx.play(if (st.lastCrit > 0) Sfx.CRIT else Sfx.TAP)
-                val txt = (if (st.lastCrit > 0) "КРИТ! x${st.lastCrit}\n" else "") + "+" + fmt(st.lastGain)
+                val txt = (if (st.lastCrit > 0) t("КРИТ! x{0}", st.lastCrit) + "\n" else "") + "+" + fmt(st.lastGain)
                 fx.add(Fx(now, p.x, p.y, txt, st.lastCrit > 0, List(10) { Random.nextFloat() * 6.283f }))
                 scope.launch { pulse.snapTo(0.9f); pulse.animateTo(1f, spring(Spring.DampingRatioMediumBouncy)) }
                 if (st.lastCrit > 0) scope.launch {
@@ -276,12 +276,14 @@ fun Chip(icon: ImageVector, text: String, color: Color, onClick: (() -> Unit)? =
 fun Hud(vm: GameViewModel, s: GameState) = Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
     Balance(fmt(s.credits))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(6.dp), maxItemsInEachRow = 3) {
-        if (vm.dailyAvailable(s)) Chip(Icons.Filled.CardGiftcard, "Бонус дня", Gold) { vm.claimDaily() }
-        Chip(Icons.Filled.Bolt, "+${fmt(vm.passive(s))}/сек", Cyan); Chip(Icons.Filled.TouchApp, "+${fmt(vm.tapPower(s))}", Pink)
+        if (vm.dailyAvailable(s)) Chip(Icons.Filled.CardGiftcard, t("Бонус дня"), Gold) { vm.claimDaily() }
+        Chip(Icons.Filled.Bolt, t("+{0}/сек", fmt(vm.passive(s))), Cyan); Chip(Icons.Filled.TouchApp, "+${fmt(vm.tapPower(s))}", Pink)
         if (s.dust > 0) Chip(Icons.Filled.Star, "${s.dust}", Gold)
         val left = (s.boostUntil - System.currentTimeMillis()) / 1000
-        if (left > 0) Chip(Icons.Filled.Whatshot, "x10 · ${left}с", Gold)
-        if ((s.counts[21] ?: 0) > 0) Chip(Icons.Filled.Visibility, "10 мин: +${fmt(vm.passive(s) * 600)}", Pink)
+        if (left > 0) Chip(Icons.Filled.Whatshot, t("x10 · {0}с", left), Gold)
+        val cl = (s.caravanUntil - System.currentTimeMillis()) / 1000
+        if (cl > 0) Chip(Icons.Filled.LocalShipping, t("Караван x6 · {0}с", cl), Cyan)
+        if ((s.counts[21] ?: 0) > 0) Chip(Icons.Filled.Visibility, t("10 мин: +{0}", fmt(vm.passive(s) * 600)), Pink)
     }
 }
 
@@ -290,7 +292,7 @@ fun ComboBar(vm: GameViewModel, s: GameState) {
     val p by animateFloatAsState((s.combo / 50f).coerceIn(0f, 1f), label = "combo")
     val col = when { s.combo >= 50 -> Gold; s.combo >= 25 -> Pink; else -> Cyan }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(if (s.combo > 0) "КОМБО x${vm.comboMult(s.combo)} · ${s.combo}" else "Тапай быстрее — копи комбо", color = col, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(if (s.combo > 0) t("КОМБО x{0} · {1}", vm.comboMult(s.combo), s.combo) else t("Тапай быстрее — копи комбо"), color = col, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Box(Modifier.width(240.dp).height(10.dp).clip(RoundedCornerShape(50)).background(Color(0x22FFFFFF))) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(p).background(Brush.horizontalGradient(listOf(Cyan, col))))
         }
@@ -303,7 +305,7 @@ fun PrestigeButton(vm: GameViewModel, s: GameState) {
     Button(onClick = { vm.prestige(); if (s.sound) Sfx.play(Sfx.PRESTIGE) }, enabled = gain >= 1, shape = RoundedCornerShape(50),
         colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black,
             disabledContainerColor = Color(0x22FFFFFF), disabledContentColor = Color.Gray)) {
-        Text(if (gain >= 1) "Престиж: +$gain пыли" else "Престиж с 1M за забег", fontWeight = FontWeight.Bold)
+        Text(if (gain >= 1) t("Престиж: +{0} пыли", gain) else t("Престиж с 1M за забег"), fontWeight = FontWeight.Bold)
     }
 }
 
@@ -312,6 +314,7 @@ fun MainScreen(vm: GameViewModel, s: GameState) = Box(Modifier.fillMaxSize()) {
     MainContent(vm, s)
     MeteorLayer(vm)
     StormLayer(vm)
+    CaravanLayer(vm)
 }
 
 /** Золотой метеорит: пролетает раз в 30–90 сек, тап даёт бонус */
@@ -337,7 +340,7 @@ fun MeteorLayer(vm: GameViewModel) {
             Modifier.offset { IntOffset((prog.value * (w + 200f) - 100f).roundToInt(), (yFrac * h + sin(prog.value * 9f) * 30f).roundToInt()) }
                 .size(64.dp).background(Brush.radialGradient(listOf(Gold.copy(alpha = 0.7f), Color.Transparent)), CircleShape)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    msg = "Метеорит! " + vm.catchMeteor(); visible = false; if (vm.state.value.sound) Sfx.play(Sfx.METEOR)
+                    msg = t("Метеорит!") + " " + vm.catchMeteor(); visible = false; if (vm.state.value.sound) Sfx.play(Sfx.METEOR)
                 }, contentAlignment = Alignment.Center) {
                     Canvas(Modifier.fillMaxSize()) {
                         val c = center
@@ -356,16 +359,16 @@ fun MeteorLayer(vm: GameViewModel) {
 fun AchievementsScreen(s: GameState) {
     val done = achCount(s)
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Достижения", color = Color.White, style = Title.copy(fontSize = 26.sp, color = Color.White))
-        Text("$done / ${ACHS.size} · +$done% к доходу", color = Gold, fontWeight = FontWeight.Bold)
+        Text(t("Достижения"), color = Color.White, style = Title.copy(fontSize = 26.sp, color = Color.White))
+        Text(t("{0} / {1} · +{0}% к доходу", done, ACHS.size), color = Gold, fontWeight = FontWeight.Bold)
         LazyVerticalGrid(GridCells.Adaptive(104.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(ACHS) { a ->
                 val ok = a.check(s)
                 Column(Modifier.glass(if (ok) Gold.copy(alpha = 0.8f) else Color(0x22FFFFFF)).padding(10.dp).alpha(if (ok) 1f else 0.4f),
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(ACH_ICONS[ACHS.indexOf(a)], null, tint = if (ok) Gold else Color.White, modifier = Modifier.size(32.dp))
-                    Text(a.name, fontSize = 12.sp, color = if (ok) Color.White else Color(0xFFD6D5E8), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                    Text(a.desc, fontSize = 10.sp, color = Color(0xFFD6D5E8), textAlign = TextAlign.Center)
+                    Text(t(a.name), fontSize = 12.sp, color = if (ok) Color.White else Color(0xFFD6D5E8), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Text(t(a.desc), fontSize = 10.sp, color = Color(0xFFD6D5E8), textAlign = TextAlign.Center)
                 }
             }
         }
@@ -392,7 +395,7 @@ fun MainContent(vm: GameViewModel, s: GameState) {
 fun UpgradesScreen(vm: GameViewModel, s: GameState) {
     var qty by remember { mutableIntStateOf(1) }
     val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "p")
-    val sections = listOf("ЗА ТАП" to Kind.TAP, "ПАССИВНЫЙ ДОХОД" to Kind.PASSIVE, "МНОЖИТЕЛИ" to Kind.MULT, "УТИЛИТЫ" to Kind.CRIT)
+    val sections = listOf(t("ЗА ТАП") to Kind.TAP, t("ПАССИВНЫЙ ДОХОД") to Kind.PASSIVE, t("МНОЖИТЕЛИ") to Kind.MULT, t("УТИЛИТЫ") to Kind.CRIT)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { Balance(fmt(s.credits), 26.sp) }
         item {
@@ -417,9 +420,9 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
                 val accent = if (u.kind == Kind.MULT) Gold else if (u.kind == Kind.TAP) Pink else Cyan
                 val prog by animateFloatAsState((s.credits / p).toFloat().coerceIn(0f, 1f), label = "p")
                 val desc = when (u.kind) {
-                    Kind.TAP -> "+${fmt(u.value)} за тап"; Kind.PASSIVE -> "+${fmt(u.value)}/сек"
-                    Kind.MULT -> "×${u.value} ко всему"; Kind.CRIT -> "+5% к шансу крита"
-                    Kind.UTIL -> when (u.id) { 19 -> "метеориты чаще"; 20 -> "награда метеоритов x2"; else -> "прогноз дохода" }
+                    Kind.TAP -> t("+{0} за тап", fmt(u.value)); Kind.PASSIVE -> t("+{0}/сек", fmt(u.value))
+                    Kind.MULT -> t("×{0} ко всему", u.value); Kind.CRIT -> t("+5% к шансу крита")
+                    Kind.UTIL -> when (u.id) { 19 -> t("метеориты чаще"); 20 -> t("награда метеоритов x2"); else -> t("прогноз дохода") }
                 }
                 val cardShape = RoundedCornerShape(28.dp)
                 val canBuy = !owned && s.credits >= p
@@ -441,7 +444,7 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
                         Icon(iconFor(u.id), null, tint = accent, modifier = Modifier.size(36.dp))
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text(u.name, fontWeight = FontWeight.SemiBold, fontSize = 17.sp,
+                        Text(t(u.name), fontWeight = FontWeight.SemiBold, fontSize = 17.sp,
                             color = Color(0xFFF4F8FF), maxLines = 2, lineHeight = 20.sp)
                         Text("$desc · ×$n", fontSize = 12.sp, color = Color(0xFFB5D4F5), maxLines = 1)
                         Box(
@@ -467,7 +470,7 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(if (owned) "ЕСТЬ" else "✦ ${if (q > 1) "×$q · " else ""}${fmt(p)}",
+                        Text(if (owned) t("ЕСТЬ") else "✦ ${if (q > 1) "×$q · " else ""}${fmt(p)}",
                             fontWeight = FontWeight.Bold, fontSize = 14.sp,
                             color = if (canBuy) Color(0xFFB8F5FF) else Color(0xFF7FA6CE),
                             textAlign = TextAlign.Center, maxLines = 2, lineHeight = 17.sp)
@@ -481,12 +484,12 @@ fun UpgradesScreen(vm: GameViewModel, s: GameState) {
 @Composable
 fun StatsScreen(s: GameState) {
     val rows = listOf(
-        Triple(Icons.Filled.TouchApp, "Тапов", s.taps.toString()), Triple(Icons.Filled.Diamond, "Заработано", fmt(s.total)),
-        Triple(Icons.Filled.FlashOn, "Критов", s.crits.toString()), Triple(Icons.Filled.Whatshot, "Лучшее комбо", s.bestCombo.toString()),
-        Triple(Icons.Filled.Star, "Звёздная пыль", s.dust.toString()), Triple(Icons.Filled.Cached, "Престижей", s.prestiges.toString()),
-        Triple(Icons.Filled.Timer, "Время в игре", "${s.playSeconds / 60} мин"), Triple(Icons.Filled.TrackChanges, "Метеоритов", s.meteors.toString()))
+        Triple(Icons.Filled.TouchApp, t("Тапов"), s.taps.toString()), Triple(Icons.Filled.Diamond, t("Заработано"), fmt(s.total)),
+        Triple(Icons.Filled.FlashOn, t("Критов"), s.crits.toString()), Triple(Icons.Filled.Whatshot, t("Лучшее комбо"), s.bestCombo.toString()),
+        Triple(Icons.Filled.Star, t("Звёздная пыль"), s.dust.toString()), Triple(Icons.Filled.Cached, t("Престижей"), s.prestiges.toString()),
+        Triple(Icons.Filled.Timer, t("Время в игре"), t("{0} мин", s.playSeconds / 60)), Triple(Icons.Filled.TrackChanges, t("Метеоритов"), s.meteors.toString()))
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Статистика", color = Color.White, style = Title.copy(fontSize = 26.sp, color = Color.White))
+        Text(t("Статистика"), color = Color.White, style = Title.copy(fontSize = 26.sp, color = Color.White))
         rows.chunked(2).forEach { pair ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEach { (ic, k, v) ->
@@ -502,7 +505,7 @@ fun StatsScreen(s: GameState) {
             }
         }
         // Локальный рейтинг: соперники растут вместе со временем в игре
-        Text("Рейтинг магнатов", style = Title.copy(fontSize = 20.sp, color = Gold), modifier = Modifier.padding(top = 8.dp))
+        Text(t("Рейтинг магнатов"), style = Title.copy(fontSize = 20.sp, color = Gold), modifier = Modifier.padding(top = 8.dp))
         val rivals = listOf("Звёздный Волк" to 2e4, "Капитан Нова" to 8e5, "Лорд Квазар" to 4e7,
             "Мадам Орбита" to 3e9, "Тёмный Барон" to 2e11, "Император Зет" to 5e13)
         val hours = s.playSeconds / 3600.0
@@ -510,7 +513,7 @@ fun StatsScreen(s: GameState) {
         board.forEachIndexed { i, (name, v) ->
             val me = name == "Вы"
             Row(Modifier.fillMaxWidth().glass(if (me) Gold else Color(0x22FFFFFF)).padding(horizontal = 14.dp, vertical = 10.dp), Arrangement.SpaceBetween) {
-                Text("${i + 1}. $name", fontWeight = if (me) FontWeight.Black else FontWeight.Normal, color = if (me) Gold else Color.White)
+                Text("${i + 1}. ${t(name)}", fontWeight = if (me) FontWeight.Black else FontWeight.Normal, color = if (me) Gold else Color.White)
                 Text(fmt(v), color = if (me) Gold else Cyan, fontWeight = FontWeight.Bold)
             }
         }
@@ -535,8 +538,8 @@ fun SettingsScreen(vm: GameViewModel, s: GameState) {
                             it.write(vm.exportSave())
                         } ?: error("Не удалось открыть файл для записи")
                     }
-                    transferMessage = "Резервная копия сохранена. Не удаляй этот файл — он понадобится после переустановки."
-                } catch (_: Exception) { transferMessage = "Не удалось сохранить резервную копию." }
+                    transferMessage = t("Резервная копия сохранена. Не удаляй этот файл — он понадобится после переустановки.")
+                } catch (_: Exception) { transferMessage = t("Не удалось сохранить резервную копию.") }
             }
         }
     }
@@ -550,41 +553,42 @@ fun SettingsScreen(vm: GameViewModel, s: GameState) {
                         context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                             ?: error("Не удалось прочитать файл")
                     }
-                    transferMessage = if (vm.importSave(text)) "Сохранение восстановлено!" else "Файл не похож на сохранение SpaceTycoon."
-                } catch (_: Exception) { transferMessage = "Не удалось прочитать резервную копию." }
+                    transferMessage = if (vm.importSave(text)) t("Сохранение восстановлено!") else t("Файл не похож на сохранение SpaceTycoon.")
+                } catch (_: Exception) { transferMessage = t("Не удалось прочитать резервную копию.") }
             }
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Настройки", color = Color.White, style = Title.copy(fontSize = 26.sp, color = Color.White))
+        Text(t("Настройки"), color = Color.White, style = Title.copy(fontSize = 26.sp, color = Color.White))
         val ver = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" }
-        Text("Космический Магнат · $ver", color = Color(0x99FFFFFF), fontSize = 12.sp)
+        Text(t("Космический Магнат · {0}", ver), color = Color(0x99FFFFFF), fontSize = 12.sp)
+        LanguagePicker(vm)
         Row(Modifier.fillMaxWidth().glass().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text("Вибрация", color = Color.White, fontSize = 18.sp); Switch(checked = s.vibrate, onCheckedChange = vm::setVibrate)
+            Text(t("Вибрация"), color = Color.White, fontSize = 18.sp); Switch(checked = s.vibrate, onCheckedChange = vm::setVibrate)
         }
         Row(Modifier.fillMaxWidth().glass().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text("Звуки", color = Color.White, fontSize = 18.sp); Switch(checked = s.sound, onCheckedChange = vm::setSound)
+            Text(t("Звуки"), color = Color.White, fontSize = 18.sp); Switch(checked = s.sound, onCheckedChange = vm::setSound)
         }
-        Text("Резервная копия", color = Cyan, style = Title.copy(fontSize = 18.sp))
-        Text("Чтобы прогресс пережил удаление игры, сохрани файл в папку «Загрузки» или облако. После установки выбери этот файл для восстановления.", color = Color.LightGray, fontSize = 13.sp)
+        Text(t("Резервная копия"), color = Cyan, style = Title.copy(fontSize = 18.sp))
+        Text(t("Чтобы прогресс пережил удаление игры, сохрани файл в папку «Загрузки» или облако. После установки выбери этот файл для восстановления."), color = Color.LightGray, fontSize = 13.sp)
         Button(onClick = { exportLauncher.launch("SpaceTycoon_save.json") }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.SaveAlt, null); Spacer(Modifier.width(8.dp)); Text("Сохранить резервную копию")
+            Icon(Icons.Filled.SaveAlt, null); Spacer(Modifier.width(8.dp)); Text(t("Сохранить резервную копию"))
         }
         OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/*", "*/*")) }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.Restore, null); Spacer(Modifier.width(8.dp)); Text("Восстановить сохранение")
+            Icon(Icons.Filled.Restore, null); Spacer(Modifier.width(8.dp)); Text(t("Восстановить сохранение"))
         }
         Button(onClick = { confirm = true }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C), contentColor = Color.White)) { Text("Сбросить прогресс", color = Color.White) }
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C), contentColor = Color.White)) { Text(t("Сбросить прогресс"), color = Color.White) }
     }
     transferMessage?.let { message ->
         AlertDialog(onDismissRequest = { transferMessage = null }, containerColor = Color(0xFF14103A),
-            title = { Text("Резервная копия") }, text = { Text(message) },
-            confirmButton = { TextButton(onClick = { transferMessage = null }) { Text("ОК", color = Cyan) } })
+            title = { Text(t("Резервная копия")) }, text = { Text(message) },
+            confirmButton = { TextButton(onClick = { transferMessage = null }) { Text(t("ОК"), color = Cyan) } })
     }
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, containerColor = Color(0xFF14103A),
-        title = { Text("Сбросить всё?", color = Color.White) }, text = { Text("Прогресс будет удалён безвозвратно.", color = Color(0xFFD6D5E8)) },
-        confirmButton = { TextButton(onClick = { vm.reset(); confirm = false }) { Text("Да", color = Pink) } },
-        dismissButton = { TextButton(onClick = { confirm = false }) { Text("Отмена", color = Color.White) } })
+        title = { Text(t("Сбросить всё?"), color = Color.White) }, text = { Text(t("Прогресс будет удалён безвозвратно."), color = Color(0xFFD6D5E8)) },
+        confirmButton = { TextButton(onClick = { vm.reset(); confirm = false }) { Text(t("Да"), color = Pink) } },
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text(t("Отмена"), color = Color.White) } })
 }
 
 class Rock(val id: Int, val x: Float, val born: Long)
@@ -615,7 +619,7 @@ fun StormLayer(vm: GameViewModel) {
                 delay(350)
             }
             delay(2000)
-            msg = "Шторм окончен! Уничтожено: $hits · " + vm.stormReward(hits)
+            msg = t("Шторм окончен! Уничтожено: {0}", hits) + " · " + vm.stormReward(hits)
             rocks.clear(); phase = 0
         }
     }
@@ -624,9 +628,9 @@ fun StormLayer(vm: GameViewModel) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat(); val h = constraints.maxHeight.toFloat()
         if (phase == 1) Button(onClick = { phase = 2 }, Modifier.align(Alignment.TopCenter).padding(top = 150.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Pink)) { Text("Астероидный шторм! Нажми", fontWeight = FontWeight.Bold) }
+            colors = ButtonDefaults.buttonColors(containerColor = Pink)) { Text(t("Астероидный шторм! Нажми"), fontWeight = FontWeight.Bold) }
         if (phase == 2) {
-            Text("Шторм: ${left}с · уничтожено $hits", Modifier.align(Alignment.TopCenter).padding(top = 150.dp),
+            Text(t("Шторм: {0}с · уничтожено {1}", left, hits), Modifier.align(Alignment.TopCenter).padding(top = 150.dp),
                 color = Pink, style = Title.copy(fontSize = 18.sp, shadow = Shadow(Pink, blurRadius = 20f)))
             rocks.forEach { r ->
                 key(r.id) {
@@ -660,17 +664,68 @@ fun PetCard(vm: GameViewModel, s: GameState) {
             contentAlignment = Alignment.Center) { Icon(Icons.Filled.Pets, null, tint = Color(0xFF69F0AE), modifier = Modifier.size(30.dp)) }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Космо-питомец", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false)
+                Text(t("Космо-питомец"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false)
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).background(Color(0x3348E8C1)).padding(horizontal = 7.dp, vertical = 3.dp)) {
-                    Text(if (s.pet == 0) "Яйцо" else "Ур. ${s.pet}", color = Color(0xFF8FFFD7), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
+                    Text(if (s.pet == 0) t("Яйцо") else t("Ур. {0}", s.pet), color = Color(0xFF8FFFD7), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
                 }
             }
-            Text("Сейчас +${s.pet * 5}% ко всему · каждый уровень +5%", fontSize = 12.sp, color = Color(0xFFD8D5F5))
+            Text(t("Сейчас +{0}% ко всему · каждый уровень +5%", s.pet * 5), fontSize = 12.sp, color = Color(0xFFD8D5F5))
         }
         Button(enabled = s.credits >= cost, shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF168F9D), contentColor = Color.White),
             onClick = { if (vm.feedPet() && s.sound) Sfx.play(Sfx.BUY) }) {
-            Text((if (s.pet == 0) "Вылупить " else "Кормить ") + fmt(cost), fontWeight = FontWeight.Bold)
+            Text(t(if (s.pet == 0) "Вылупить" else "Кормить") + " " + fmt(cost), fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/** Выбор языка: кнопки с флагами стран */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun LanguagePicker(vm: GameViewModel) {
+    Column(Modifier.fillMaxWidth().glass().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Filled.Language, null, tint = Cyan)
+            Text("Язык / Language", color = Cyan, style = Title.copy(fontSize = 18.sp))
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Lang.values().forEach { l ->
+                val sel = I18n.lang == l
+                Row(Modifier.clip(RoundedCornerShape(50)).background(if (sel) Cyan.copy(alpha = 0.25f) else Color(0x22FFFFFF))
+                    .border(1.dp, if (sel) Cyan else Color(0x33FFFFFF), RoundedCornerShape(50))
+                    .clickable { vm.setLang(l) }.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(l.flag, fontSize = 22.sp)
+                    Text(l.title, color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+/** Торговый караван: раз в 2–4 минуты летит справа налево, тап даёт x6 на 30 секунд */
+@Composable
+fun CaravanLayer(vm: GameViewModel) {
+    val prog = remember { Animatable(0f) }
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(90_000)
+        while (true) {
+            prog.snapTo(0f); visible = true
+            prog.animateTo(1f, tween(9000, easing = LinearEasing))
+            visible = false
+            delay(Random.nextLong(120_000, 240_001))
+        }
+    }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val w = constraints.maxWidth.toFloat(); val h = constraints.maxHeight.toFloat()
+        if (visible) Box(
+            Modifier.offset { IntOffset((w + 120f - prog.value * (w + 240f)).roundToInt(), (h * 0.78f).roundToInt()) }
+                .size(72.dp).background(Brush.radialGradient(listOf(Cyan.copy(alpha = 0.45f), Color.Transparent)), CircleShape)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                    visible = false; vm.startCaravan(); if (vm.state.value.sound) Sfx.play(Sfx.BUY)
+                }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.LocalShipping, null, tint = Color.White, modifier = Modifier.size(40.dp))
         }
     }
 }

@@ -43,6 +43,7 @@ data class GameState(
     val dailyDay: Long = 0,       // день, когда забрали ежедневный бонус
     val streak: Int = 0,          // серия дней подряд
     val loaded: Boolean = false,  // сохранение уже загружено
+    val caravanUntil: Long = 0,   // до какого времени действует x6 от каравана
     val pet: Int = 0,             // уровень космо-питомца (+5% ко всему за уровень)
     val sound: Boolean = true,    // звуки включены
 )
@@ -62,7 +63,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val TAPS = longPreferencesKey("taps"); val CRITS = longPreferencesKey("crits")
         val BEST = intPreferencesKey("best"); val DUST = intPreferencesKey("dust")
         val PRES = intPreferencesKey("pres"); val PLAY = longPreferencesKey("play")
-        val MET = longPreferencesKey("met"); val DAILY = longPreferencesKey("daily"); val STREAK = intPreferencesKey("streak"); val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last"); val BOOST = longPreferencesKey("boost"); val PET = intPreferencesKey("pet"); val SND = booleanPreferencesKey("snd")
+        val MET = longPreferencesKey("met"); val DAILY = longPreferencesKey("daily"); val STREAK = intPreferencesKey("streak"); val VIB = booleanPreferencesKey("vib"); val LAST = longPreferencesKey("last"); val BOOST = longPreferencesKey("boost"); val LANG = stringPreferencesKey("lang"); val PET = intPreferencesKey("pet"); val SND = booleanPreferencesKey("snd")
         const val MAX_OFFLINE_SEC = 30L   // оффлайн-доход не больше, чем за 30 секунд
     }
 
@@ -71,6 +72,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         var m = (1.0 + 0.05 * s.dust) * (1.0 + 0.01 * achCount(s)) * (1.0 + 0.05 * s.pet)   // пыль +5%, достижения +1%
         UPGRADES.filter { it.kind == Kind.MULT && (s.counts[it.id] ?: 0) > 0 }.forEach { m *= it.value }
         if (System.currentTimeMillis() < s.boostUntil) m *= 10
+        if (System.currentTimeMillis() < s.caravanUntil) m *= 6
         return m
     }
     fun tapPower(s: GameState) =
@@ -119,7 +121,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val g = max(passive(s) * 600, 500.0) * (1 + 0.25 * minOf(streak - 1, 10))
         val dust = if (streak % 7 == 0) 1 else 0
         _s.update { it.copy(credits = it.credits + g, total = it.total + g, run = it.run + g, dust = it.dust + dust, dailyDay = today, streak = streak) }
-        _events.tryEmit("Бонус дня: +${fmt(g)}" + (if (dust > 0) " и звёздная пыль" else "") + " · серия $streak")
+        _events.tryEmit(t("Бонус дня: +{0}", fmt(g)) + (if (dust > 0) " " + t("и звёздная пыль") else "") + " · " + t("серия {0}", streak))
         save()
     }
 
@@ -153,7 +155,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             val sec = (15 * k).toInt()
             _s.update { it.copy(meteors = it.meteors + 1, boostUntil = System.currentTimeMillis() + sec * 1000L) }
-            "x10 на $sec сек!"
+            t("x10 на {0} сек!", sec)
         }
     }
 
@@ -166,6 +168,18 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _s.update { it.copy(credits = it.credits - c, pet = it.pet + 1) }
         return true
     }
+    /** Смена языка: запоминаем выбор отдельно от прогресса, сброс игры язык не трогает */
+    fun setLang(l: Lang) {
+        I18n.lang = l
+        viewModelScope.launch { ds.edit { it[LANG] = l.code } }
+    }
+
+    /** Торговый караван: x6 ко всему на 30 секунд */
+    fun startCaravan() {
+        _s.update { it.copy(caravanUntil = System.currentTimeMillis() + 30_000) }
+        _events.tryEmit(t("Торговый караван! x6 на 30 сек"))
+    }
+
     fun setSound(v: Boolean) = _s.update { it.copy(sound = v) }
 
     fun setVibrate(v: Boolean) = _s.update { it.copy(vibrate = v) }
@@ -338,6 +352,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { cleanupExternalBackups() }
             val p = ds.data.first()
+            I18n.lang = Lang.fromCode(p[LANG]) ?: Lang.detect()   // язык из сохранения или язык телефона
             val counts = (p[COUNTS] ?: "").split(",").filter { it.contains("=") }
                 .associate { it.substringBefore("=").toInt() to it.substringAfter("=").toInt() }
             var s = GameState(p[CREDITS] ?: 0.0, p[TOTAL] ?: 0.0, p[RUN] ?: 0.0, counts,

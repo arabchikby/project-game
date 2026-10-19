@@ -9,8 +9,8 @@ android {
         applicationId = "com.example.spacetycoon"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "alpha 5.0 by arabchikby"
+        versionCode = 6
+        versionName = "alpha 6.0 by arabchikby"
     }
     // Один и тот же ключ подписи для всех сборок: иначе каждая сборка в GitHub Actions
     // получает новый случайный ключ и Android не даёт обновить приложение поверх старого.
